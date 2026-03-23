@@ -1,0 +1,49 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.env
+.venv/
+venv/
+
+# 環境変数
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+
+# エディタ
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# GitNexus インデックス（ローカル生成物）
+.gitnexus/
+
+# テスト・カバレッジ
+coverage/
+.nyc_output/
+
+# ログ
+*.log
+logs/
+
+# Agent Skill Bus ランタイムデータ
+.skill-bus-data/

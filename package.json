@@ -1,0 +1,42 @@
+{
+  "name": "context-and-impact",
+  "version": "2.0.0",
+  "description": "4層コンテキスト収集 × Agent Skill Bus × GitNexus 統合パイプライン",
+  "type": "module",
+  "scripts": {
+    "status": "python3 src/cli/semantic-search.py --status",
+    "search": "python3 src/cli/semantic-search.py",
+    "dashboard": "npx agent-skill-bus dashboard",
+    "w1": "bash examples/w1-keyword-search.sh",
+    "w2": "bash examples/w2-impact-analysis.sh",
+    "w3": "bash examples/w3-cross-domain.sh",
+    "w4": "bash examples/w4-quality-check.sh",
+    "w5": "bash examples/w5-full-pipeline.sh",
+    "orphan-link": "bash examples/w6-orphan-linking.sh",
+    "lint": "echo 'No lint configured'"
+  },
+  "keywords": [
+    "context-engineering",
+    "agent-skill-bus",
+    "gitnexus",
+    "obsidian",
+    "semantic-search",
+    "miyabi"
+  ],
+  "author": "Hayashi Shunsuke <shunsuke@ambitiousai.co.jp>",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {},
+  "peerDependencies": {
+    "agent-skill-bus": ">=1.3.0",
+    "gitnexus": ">=1.0.0"
+  },
+  "engines": {
+    "node": ">=24.0.0",
+    "python": ">=3.10"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ShunsukeHayashi/context-and-impact.git"
+  }
+}
