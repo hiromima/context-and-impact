@@ -17,6 +17,7 @@ trigger: >
   self-improving, cycle, フィードバックループ, orchestration
 runtime: claude-code   # also: openclaw (see skills/openclaw/SKILL.md)
 integrates:
+  # ── Tier 1: コアバンドル（必須）──────────────────────────────────
   - gni-first-agent-orchestration  # Phase C: GNI Impact First + DAG
   - task-dag-planner               # Phase C: tasks.json + task-sync.sh
   - aria-ldd-add                   # Phase E: project_memory audit trail
@@ -26,6 +27,17 @@ integrates:
   - gitnexus-impact-analysis       # Phase A2a: blast radius
   - obsidian-gni                   # Phase A2b: wikilink graph
   - agent-teams                    # Phase D: parallel sub-agents
+  # ── Tier 2: 拡張バンドル（推奨）──────────────────────────────────
+  - gni-ops                        # Phase A2a前処理: インデックス管理・クエリ実行
+  - gitnexus-exploring             # Phase A2a探索: コード構造の理解フェーズ
+  - gitnexus-cli                   # Phase A冒頭: インデックス鮮度確認・自動更新
+  - obsidian-knowledge             # Phase A L3前処理: Vault同期・整備
+  - ai-triad                       # Phase D前段: Claude/Codex/Gemini 最適役割判定
+  - codex-workers                  # Phase D: Codex ワーカー詳細定義・運用
+  - miso                           # Phase D: ミッションボード進捗リアルタイム可視化
+  - graph-master                   # Phase B: ナレッジグラフ品質スコア算出
+  - pen1-report                    # Phase E: 完了報告（PEN1 TUI + Telegram + X素材）
+  - miyabi-omega                   # Phase A-E対応パイプライン（6段階↔5フェーズ）
 ---
 
 # Context & Impact v3.0 — The Universal Context-to-Execution Pipeline
@@ -137,6 +149,16 @@ grep -rn "{関数名|クラス名}" ~/dev/products/kotowari/src/ --include="*.ts
 
 **コード変更前に必ず実行する**。
 
+> **[Tier 2 gitnexus-cli] Phase A 冒頭のインデックス鮮度確認**:
+> ```bash
+> # インデックス状態を確認（stale なら自動更新）
+> gitnexus status --repo {repo}
+> # → stale の場合: gitnexus analyze --path {path} --embeddings
+> # → fresh の場合: そのまま L2a 影響分析へ
+> ```
+> stale 判定基準: 最終インデックスから 24 時間以上経過、または未コミット変更あり。
+> `gni-ops` スキルを参照してクエリ最適化・再インデックスを実行。
+
 ```bash
 # インパクト分析（upstream: 「誰が使っているか」）
 gitnexus impact {functionName} --direction upstream --min-confidence 0.8 --max-depth 3
@@ -205,6 +227,17 @@ RETURN f.name, f.filePath LIMIT 20
 
 ### Layer 3: Smart Connections セマンティック検索
 
+> **[Tier 2 obsidian-knowledge] Vault 鮮度確認**:
+> ```bash
+> # Vault の最終更新日を確認
+> git -C ~/dev/content/obsidian log -1 --format="%ar"
+> # → 24時間以上前の場合: obsidian-knowledge スキルで同期後に L3 検索
+> # → 新鮮な場合: そのまま L3 セマンティック検索へ
+> ```
+> L3 ベクトルインデックス（4,685+ ノード）を最新状態で使うため、
+> Vault に大量追加があった場合は Obsidian の Smart Connections プラグインで
+> 再インデックスを実行してから L3 を使用すること。
+
 Claude Code での使用:
 ```
 mcp__smart-connections__semantic_search({"query": "合同会社みやび 設立 必要書類", "limit": 10})
@@ -226,6 +259,13 @@ QUERY="合同会社みやび 設立 必要書類" python3 src/cli/semantic-searc
 ---
 
 ## PHASE B: Context Engineering（プロンプト最適化）
+
+> **[Tier 2 graph-master]** ナレッジグラフ品質スコア:
+> ```bash
+> # graph-master でグラフ品質を評価（孤立ノート・MOCカバレッジ確認）
+> # quality_score の補正に使用: グラフ品質 < 0.6 → L2b の信頼性低下を警告
+> # 詳細: ~/.claude/skills/graph-master/SKILL.md 参照
+> ```
 
 高精度タスク時のみ起動。Context Engineering MCP バックエンドが必要。
 
@@ -386,6 +426,38 @@ npx agent-skill-bus enqueue \
 ## PHASE D: Multi-Agent Execution（マルチエージェント実行）
 
 > **統合スキル**: `multi-agent-orchestration` + `agent-teams` + `openclaw-agents`
+> **[Tier 2]**: `ai-triad` (役割判定) + `codex-workers` (Codex詳細定義) + `miso` (進捗可視化)
+
+### D-0: エージェント役割判定（ai-triad）— Phase D 前段
+
+> **[Tier 2 ai-triad]** タスク種別を判定し最適なエージェントを選択する:
+>
+> | タスク種別 | 推奨エージェント | 根拠 |
+> |-----------|----------------|------|
+> | コード実装・バグ修正 | Codex (`codex-workers` 参照) | 自律コーディング特化 |
+> | リサーチ・調査・設計 | Claude Code | 文脈理解・推論が必要 |
+> | 定型自動化・通知 | OpenClaw | 並列実行・外部連携 |
+> | 画像生成 | Gemini | マルチモーダル特化 |
+>
+> ```bash
+> # ai-triad でタスク分類（擬似コード）
+> # task_type = classify(task_description)
+> # → "code_impl"    → Codex ワーカーに投入（codex-workers SKILL.md 参照）
+> # → "research"     → Claude Code が直接実行
+> # → "automation"   → openclaw agent message {agent} "[TASK] ..."
+> # → "image_gen"    → gemini CLI / Gemini API
+> ```
+
+### D-0.5: ミッションボード作成（miso）— Phase D 開始時
+
+> **[Tier 2 miso]** Phase D 開始時に Telegram ミッションボードを作成し進捗可視化:
+>
+> ```bash
+> # miso でミッションボード作成（Telegram 通知付き）
+> # → 各エージェントのタスク割り当てをリアルタイムで可視化
+> # → タスク完了ごとに Telegram に通知
+> # 詳細: ~/.claude/skills/miso/SKILL.md 参照
+> ```
 
 ### D-1: 役割分担マトリクス（絶対ルール）
 
@@ -508,6 +580,24 @@ npx agent-skill-bus improve --skill context-and-impact
 # 直近の実行履歴
 npx agent-skill-bus dashboard --days 7
 ```
+
+### E-4: pen1-report 完了報告 — [Tier 2] Phase E 最終ステップ
+
+> **[Tier 2 pen1-report]** Phase E 完了時に自動通知:
+>
+> ```bash
+> # pen1-report でタスク完了を報告
+> # → PEN1 TUI に結果サマリー表示
+> # → Telegram に完了通知送信
+> # → X（Twitter）投稿素材を生成
+> # 詳細: ~/.claude/skills/pen1-report/SKILL.md 参照
+> ```
+>
+> | 報告先 | 内容 | 条件 |
+> |--------|------|------|
+> | PEN1 TUI | タスクID・品質スコア・所要時間 | 常時 |
+> | Telegram | 完了通知（Inline Button付き） | Phase D 完了後 |
+> | X素材 | 成果サマリー（下書き） | quality_score ≥ 85 時のみ |
 
 ---
 
@@ -678,6 +768,38 @@ echo "## $(date '+%Y-%m-%d %H:%M') W6 完了
 
 # === PHASE E: cycle-ops フィードバック ===
 npx miyabi cycle full
+```
+
+---
+
+## miyabi-omega との 1:1 マッピング
+
+> **[Tier 2 miyabi-omega]** miyabi-omega の6段階と context-and-impact の対応フェーズ:
+
+```
+miyabi-omega の6段階           context-and-impact の対応フェーズ
+────────────────────────────────────────────────────────────────
+段階1: 分析（Analysis）    ↔   Phase A: Context Assembly (L0-L3)
+段階2: 計画（Planning）    ↔   Phase B: Quality Gate + Phase C: GNI-First DAG
+段階3: 実行（Execution）   ↔   Phase D: Multi-Agent Execution
+段階4: テスト（Testing）   ↔   Phase E: ARIA Audit（一部）
+段階5: デプロイ（Deploy）  ↔   miyabi-ship スキル
+段階6: 報告（Report）      ↔   pen1-report スキル
+```
+
+### 統合呼び出しパターン
+
+```bash
+# miyabi-omega からの呼び出し（各段階で context-and-impact を使用）
+# 段階1: miyabi omega analyze → Phase A 自動実行
+# 段階2: miyabi omega plan   → Phase B + C 自動実行
+# 段階3: miyabi omega exec   → Phase D 自動実行
+# 段階4: miyabi omega test   → Phase E (audit) 自動実行
+# 段階5: miyabi ship
+# 段階6: pen1-report
+
+# context-and-impact から miyabi-ship へのハンドオフ
+# Phase D 完了後、品質スコア ≥ 70 なら自動的に miyabi-ship に引き渡し
 ```
 
 ---
