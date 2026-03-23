@@ -1,0 +1,142 @@
+name: Update GitHub Projects V2
+
+on:
+  issues:
+    types: [opened, closed, reopened, labeled, unlabeled]
+  pull_request:
+    types: [opened, closed, merged]
+
+jobs:
+  sync-project:
+    name: Sync Issue/PR status to Projects V2
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Add Issue to project
+        if: github.event_name == 'issues' && github.event.action == 'opened'
+        uses: actions/add-to-project@v1.0.2
+        with:
+          project-url: https://github.com/users/ShunsukeHayashi/projects/9
+          github-token: ${{ secrets.PROJECT_TOKEN }}
+
+      - name: Move to Done when Issue is closed
+        if: github.event_name == 'issues' && github.event.action == 'closed'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PROJECT_TOKEN }}
+          script: |
+            const query = `
+              query($owner: String!, $repo: String!, $issue: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  issue(number: $issue) {
+                    projectItems(first: 10) {
+                      nodes {
+                        id
+                        project {
+                          id
+                          title
+                        }
+                        fieldValues(first: 20) {
+                          nodes {
+                            ... on ProjectV2ItemFieldSingleSelectValue {
+                              name
+                              field { ... on ProjectV2SingleSelectField { id name } }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+            const result = await github.graphql(query, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue: context.issue.number,
+            });
+
+            const items = result.repository.issue.projectItems.nodes;
+            if (!items.length) {
+              console.log('No project items found for this issue.');
+              return;
+            }
+
+            for (const item of items) {
+              // ステータスフィールドを探す
+              const statusField = item.fieldValues.nodes.find(
+                n => n.field && n.field.name === 'Status'
+              );
+              if (!statusField) continue;
+
+              // プロジェクトの "Done" オプション ID を取得して更新
+              const projectQuery = `
+                query($projectId: ID!) {
+                  node(id: $projectId) {
+                    ... on ProjectV2 {
+                      fields(first: 20) {
+                        nodes {
+                          ... on ProjectV2SingleSelectField {
+                            id
+                            name
+                            options { id name }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              `;
+              const projectResult = await github.graphql(projectQuery, {
+                projectId: item.project.id,
+              });
+              const fields = projectResult.node.fields.nodes;
+              const statusFieldNode = fields.find(f => f.name === 'Status');
+              if (!statusFieldNode) continue;
+
+              const doneOption = statusFieldNode.options.find(
+                o => o.name === 'Done' || o.name === '完了'
+              );
+              if (!doneOption) {
+                console.log(`"Done" option not found in project ${item.project.title}`);
+                continue;
+              }
+
+              // ステータスを Done に更新
+              await github.graphql(`
+                mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $project
+                    itemId: $item
+                    fieldId: $field
+                    value: { singleSelectOptionId: $option }
+                  }) {
+                    projectV2Item { id }
+                  }
+                }
+              `, {
+                project: item.project.id,
+                item: item.id,
+                field: statusFieldNode.id,
+                option: doneOption.id,
+              });
+              console.log(`✅ Moved item ${item.id} to Done in "${item.project.title}"`);
+            }
+
+      - name: Move to In Progress when Issue is reopened
+        if: github.event_name == 'issues' && github.event.action == 'reopened'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PROJECT_TOKEN }}
+          script: |
+            console.log(`Issue #${context.issue.number} reopened — no automatic status change (manual triage required).`);
+
+      - name: Add PR to project
+        if: github.event_name == 'pull_request' && github.event.action == 'opened'
+        uses: actions/add-to-project@v1.0.2
+        with:
+          project-url: https://github.com/users/ShunsukeHayashi/projects/9
+          github-token: ${{ secrets.PROJECT_TOKEN }}

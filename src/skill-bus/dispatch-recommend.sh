@@ -10,8 +10,8 @@ echo "=== エージェント推薦 ==="
 echo "クエリ: $QUERY"
 echo ""
 
-# リポジトリ名ベースの推薦
-if echo "$REPO" | grep -qi "kotowari"; then
+# リポジトリ名 or クエリに KOTOWARI が含まれる場合の推薦
+if echo "$REPO$QUERY" | grep -qi "kotowari"; then
   echo "  主推奨: kotowari-dev (38) [MacBook Pro] — KOTOWARI専属開発エージェント"
 fi
 
