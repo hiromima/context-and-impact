@@ -1,80 +1,113 @@
 # context-and-impact
 
-**4層コンテキスト収集 × Agent Skill Bus × GitNexus 統合パイプライン**
+**The Universal Context-to-Execution Pipeline for AI Agents**
+
+> Before you change code, before you dispatch agents, before you do *anything* — run context-and-impact first.
 
 [![GitHub Issues](https://img.shields.io/github/issues/ShunsukeHayashi/context-and-impact)](https://github.com/ShunsukeHayashi/context-and-impact/issues)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-3.0.0-brightgreen)](https://github.com/ShunsukeHayashi/context-and-impact/releases)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D24.0.0-green)](https://nodejs.org/)
+[![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-Skill-purple)](SKILL.md)
 
 ---
 
-## 概要
+## What is this?
 
-コード変更・Obsidian ノート参照・スキル実行の前に、4層のコンテキストを自動収集し、
-Agent Skill Bus の自己改善ループと GitNexus の影響分析を統合するパイプライン。
+`context-and-impact` is a **5-layer context collection + execution pipeline** that integrates multiple intelligence sources before any AI agent takes action.
+
+| Layer | Technology | What it finds |
+|-------|-----------|---------------|
+| **L0** | ARIA `project_memory/` | Persistent state and decisions from previous runs |
+| **L1** | Glob / Grep | Exact text matches, file names, function names |
+| **L2a** | **GitNexus** call graph | Code blast radius — what breaks if you change X |
+| **L2b** | **GitNexus** KùzuDB | Obsidian wikilink dependencies, cross-domain links |
+| **L3** | **SmartConnections** MCP | Conceptually related notes via semantic search |
+
+Then it plans and executes through **5 phases**:
 
 ```
-Phase A: コンテキスト収集（4層）
-  L1  → Grep/Find（テキスト検索）
-  L2a → GitNexus（コード依存グラフ）
-  L2b → GitNexus Cypher（Obsidian wikilink グラフ）
-  L3  → SmartConnections（セマンティック検索）
-
-Phase B: Context Engineering MCP（品質スコアリング）
-Phase C: Agent Skill Bus（スキル探索・実行・記録）
-Phase D: フィードバックループ（自己改善）
+PHASE A: Context Assembly  →  PHASE B: Quality Gate  →  PHASE C: GNI-First DAG
+                                                               ↓
+PHASE E: ARIA Audit + Self-Improvement  ←  PHASE D: Multi-Agent Execution
 ```
 
 ---
 
-## クイックスタート
+## Why this is different
 
-### 前提条件
+Most AI pipelines start with a prompt. This one starts with **understanding**.
 
-- Node.js v24+
-- Python 3.10+
-- GitNexus CLI: `npm install -g gitnexus`
-- Agent Skill Bus: `npm install -g agent-skill-bus`
+| Problem | What happens without this | What happens with this |
+|---------|--------------------------|----------------------|
+| Blind code changes | Agent modifies a shared utility, breaks 12 downstream callers | Blast radius analyzed first; only safe changes proceed |
+| Context drift | Each agent run starts from zero | `project_memory/` carries state across sessions |
+| Shallow search | LLM guesses from training data | Semantic + graph search over your actual codebase |
+| Cascading failures | One wrong change triggers chain of errors | Dependency DAG computed before any execution |
+| No feedback loop | Same mistakes repeated | ARIA audit records every run; skills self-improve |
 
-### セットアップ
+---
+
+## Quick Start
+
+### Prerequisites
+
+- **Node.js** v24+
+- **Python** 3.10+
+- **GitNexus CLI**: `npm install -g gitnexus`
+- **Agent Skill Bus**: `npm install -g agent-skill-bus`
+
+### Installation
 
 ```bash
 git clone https://github.com/ShunsukeHayashi/context-and-impact.git
 cd context-and-impact
 npm install
-cp .env.example .env  # 環境変数設定
+cp .env.example .env   # Configure your environment
 ```
 
-### 基本的な使い方
+### Basic Usage
 
 ```bash
-# L1: テキスト検索
-grep -r "authMiddleware" ~/dev/products/kotowari/src/ -l
+# L1: Text search — find all references to a symbol
+grep -r "authMiddleware" ./src -l
 
-# L2a: コード影響分析
-gitnexus impact authMiddleware --repo kotowari
+# L2a: Code impact analysis — what breaks if I change this?
+gitnexus impact authMiddleware --repo my-project
 
-# L2b: Obsidian wikilink 分析
+# L2b: Obsidian wikilink analysis — cross-domain knowledge graph
 gitnexus cypher --repo obsidian \
   "MATCH (f:File) WHERE f.name CONTAINS 'auth' RETURN f.name LIMIT 10"
 
-# L3: セマンティック検索
-python3 src/cli/semantic-search.py --query "JWT 認証 設計" --limit 10
+# L3: Semantic search — conceptually related notes
+python3 src/cli/semantic-search.py --query "JWT authentication design" --limit 10
 
-# Agent Skill Bus ダッシュボード
+# Agent Skill Bus dashboard
 npx agent-skill-bus dashboard
+```
+
+### Run a full workflow
+
+```bash
+# W1: Keyword search (lightest)
+bash examples/w1-keyword-search.sh "authMiddleware"
+
+# W2: Code impact analysis
+bash examples/w2-impact-analysis.sh authMiddleware my-project
+
+# W5: Full pipeline (all phases)
+bash examples/w5-full-pipeline.sh "JWT auth refactor" my-project
 ```
 
 ---
 
-## アーキテクチャ
-
-詳細は [docs/architecture.md](docs/architecture.md) を参照。
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                   context-and-impact v2.0.0                     │
+│                  context-and-impact v3.0.0                      │
 │                                                                 │
-│  Phase A: Context Collection                                    │
+│  Phase A: Context Assembly                                      │
 │  ┌─────┐  ┌──────┐  ┌──────────────────┐  ┌────────────────┐  │
 │  │ L1  │  │ L2a  │  │      L2b         │  │      L3        │  │
 │  │Grep │  │GitNx │  │GitNx + KùzuDB    │  │SmartConnect    │  │
@@ -82,108 +115,174 @@ npx agent-skill-bus dashboard
 │  └──┬──┘  └──┬───┘  └────────┬─────────┘  └───────┬────────┘  │
 │     └────────┴───────────────┴────────────────────-┘           │
 │                        │                                        │
-│  Phase B: Context Engineering MCP                               │
+│  Phase B: Quality Gate (Context Engineering MCP)               │
 │  ┌──────────────────────────────────────┐                       │
-│  │ quality_score < 70 → auto_optimize   │                       │
+│  │  quality_score < 70 → auto_optimize  │                       │
 │  └──────────────────────────────────────┘                       │
 │                        │                                        │
-│  Phase C: Agent Skill Bus                                       │
+│  Phase C: GNI-First DAG Planning                                │
 │  ┌──────────────────────────────────────┐                       │
-│  │ dashboard → enqueue → record-run     │                       │
+│  │  blast_radius → tasks.json → DAG    │                       │
 │  └──────────────────────────────────────┘                       │
 │                        │                                        │
-│  Phase D: Feedback Loop                                         │
+│  Phase D: Multi-Agent Execution                                 │
 │  ┌──────────────────────────────────────┐                       │
-│  │ flagged → improve → SKILL.md 更新    │                       │
+│  │  Claude Code / Codex / OpenClaw      │                       │
+│  └──────────────────────────────────────┘                       │
+│                        │                                        │
+│  Phase E: ARIA Audit + Self-Improvement                         │
+│  ┌──────────────────────────────────────┐                       │
+│  │  worklog.md → cycle-ops → improve   │                       │
 │  └──────────────────────────────────────┘                       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## ディレクトリ構造
+## Directory Structure
 
 ```
 context-and-impact/
-├── SKILL.md                    # 統合スキル定義（Claude Code / OpenClaw 共通）
-├── CLAUDE.md                   # Claude Code プロジェクト指示
+├── SKILL.md                    # Master skill definition (Claude Code / OpenClaw)
+├── CLAUDE.md                   # Claude Code project instructions
 ├── docs/
-│   └── architecture.md         # 詳細アーキテクチャ図
+│   └── architecture.md         # Detailed architecture diagrams
 ├── skills/
 │   ├── claude-code/
-│   │   └── SKILL.md            # Claude Code ランタイム専用
+│   │   └── SKILL.md            # Claude Code runtime variant
 │   └── openclaw/
-│       └── SKILL.md            # OpenClaw エージェント専用
+│       └── SKILL.md            # OpenClaw agent variant
 ├── src/
 │   ├── cli/
 │   │   └── semantic-search.py  # L3 SmartConnections CLI
 │   ├── gitnexus/
-│   │   └── queries.md          # L2b Cypher クエリライブラリ
-│   └── skill-bus/              # Agent Skill Bus 統合
+│   │   └── queries.md          # L2b Cypher query library
+│   └── skill-bus/              # Agent Skill Bus integration scripts
+│       ├── dispatch-recommend.sh
+│       ├── enqueue-task.sh
+│       └── record-run.sh
 └── examples/
-    ├── w1-keyword-search.sh    # W1: キーワード検索
-    ├── w2-impact-analysis.sh   # W2: 影響分析
-    ├── w3-cross-domain.sh      # W3: ドメイン横断リンク
-    ├── w4-quality-check.sh     # W4: 品質チェック
-    └── w5-full-pipeline.sh     # W5: 完全パイプライン
+    ├── w1-keyword-search.sh    # W1: Keyword search
+    ├── w2-impact-analysis.sh   # W2: Impact analysis
+    ├── w3-cross-domain.sh      # W3: Cross-domain link exploration
+    ├── w4-quality-check.sh     # W4: Quality check
+    ├── w5-full-pipeline.sh     # W5: Full pipeline
+    └── w6-orphan-linking.sh    # W6: ARIA audit loop
 ```
 
 ---
 
-## 統合ワークフロー
+## Workflows
 
-### W1: キーワード検索（最軽量）
+### W1: Keyword Search (lightest)
 
-ファイル名・関数名・Obsidian ノートをテキスト検索する。
+Search file names, function names, and Obsidian notes by text.
 
 ```bash
 bash examples/w1-keyword-search.sh "authMiddleware"
 ```
 
-### W2: コード影響分析
+### W2: Code Impact Analysis
 
-コード変更前に GitNexus で blast radius を確認する。
+Check blast radius with GitNexus before making any code change.
 
 ```bash
-bash examples/w2-impact-analysis.sh authMiddleware kotowari
+bash examples/w2-impact-analysis.sh authMiddleware my-project
 ```
 
-### W3: ドメイン横断リンク探索
+### W3: Cross-Domain Link Exploration
 
-Legal ↔ Financial などのクロスドメインリンクを探索する。
+Explore cross-domain links like Legal ↔ Financial in your knowledge graph.
 
 ```bash
 bash examples/w3-cross-domain.sh Docs-Legal Docs-Financial
 ```
 
-### W4: Obsidian 品質チェック
+### W4: Obsidian Quality Check
 
-孤立ノート検出・MOC カバレッジ確認・高インバウンドノードを分析する。
+Detect isolated notes, check MOC coverage, and find high-inbound nodes.
 
 ```bash
 bash examples/w4-quality-check.sh
 ```
 
-### W5: 完全パイプライン（全フェーズ）
+### W5: Full Pipeline (all phases)
 
-4層 + Context Engineering + Agent Skill Bus を全て統合する。
+Integrate all 5 layers + Context Engineering + Agent Skill Bus.
 
 ```bash
-bash examples/w5-full-pipeline.sh "JWT 認証 KOTOWARI" kotowari
+bash examples/w5-full-pipeline.sh "JWT auth refactor" my-project
+```
+
+### W6: ARIA Audit Loop (self-improving)
+
+Run the full pipeline with persistent audit trail and self-improvement cycle.
+
+```bash
+bash examples/w6-orphan-linking.sh
 ```
 
 ---
 
-## 関連リポジトリ
+## Skill Constellation
 
-| リポジトリ | 役割 |
-|-----------|------|
-| [agent-skill-bus](https://github.com/ShunsukeHayashi/agent-skill-bus) | Phase C の実行基盤 |
-| [gitnexus-stable-ops](~/dev/tools/gitnexus-stable-ops/) | L2a / L2b の実行基盤 |
-| [smart-connections-mcp](~/dev/tools/smart-connections-mcp/) | L3 の実行基盤 |
+`context-and-impact` is the **hub** that integrates 9 specialized skills:
+
+```
+             ┌──────────────────────────┐
+             │    context-and-impact    │  ← Hub
+             │       (v3.0.0)           │
+             └──────────┬───────────────┘
+                        │
+      ┌─────────────────┼─────────────────┐
+      │                 │                 │
+      ▼                 ▼                 ▼
+ gni-first-        task-dag-          aria-ldd-
+ agent-orch        planner             add
+      │                 │                 │
+      ▼                 ▼                 ▼
+ multi-agent-      cycle-ops         self-improving-
+ orchestration                          skills
+      │                 │                 │
+      ▼                 ▼                 ▼
+gitnexus-          obsidian-         agent-teams
+impact-analysis      gni
+```
 
 ---
 
-## ライセンス
+## Related Projects
 
-MIT © Hayashi Shunsuke / Miyabi Society
+| Repository | Role |
+|-----------|------|
+| [agent-skill-bus](https://github.com/ShunsukeHayashi/agent-skill-bus) | Phase C execution foundation |
+| [gitnexus](https://github.com/ShunsukeHayashi/gitnexus) | L2a / L2b code intelligence |
+
+---
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Commit your changes: `git commit -m 'feat: add your feature'`
+4. Push the branch: `git push origin feature/your-feature`
+5. Open a Pull Request
+
+---
+
+## For Japanese Users
+
+> **日本語ユーザーへ**: SKILL.md とドキュメントは日本語で記述されています。
+> README は国際コミュニティへの公開のため英語を主とします。
+
+詳細な日本語ドキュメントは [SKILL.md](SKILL.md) を参照してください。
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+Copyright (c) 2026 Hayashi Shunsuke / Miyabi Society

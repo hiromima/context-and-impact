@@ -1,48 +1,100 @@
 ---
 name: context-and-impact
-version: 2.0.0
+version: 3.0.0
 description: >
-  5層統合 Context-to-Execution パイプライン。
-  コンテキスト収集（4層）→ プロンプト最適化 → スキル探索・実行 の完全フロー。
-  Obsidian セマンティック検索（SmartConnections）+
-  Obsidian wikilink グラフ（GitNexus KùzuDB）+
-  コードインパクト分析（GitNexus call graph）+
-  Agent Skill Bus（スキル健全性・タスクキュー・自己改善ループ）を統合。
+  The Universal Context-to-Execution Pipeline.
+  最強統合スキル: コンテキスト収集（5層）→ 品質保証 → GNI-First DAG計画 →
+  マルチエージェント実行 → ARIA監査フィードバックループ の完全自動化。
+  Obsidian Semantic Search + GitNexus Code/Wikilink Graph +
+  Agent Skill Bus + task-dag-planner + ARIA LDD/ADD +
+  cycle-ops self-improvement を一つのパイプラインに統合。
 trigger: >
   context, impact, search, インパクト, 影響分析, コンテキスト, 検索, 調査,
   関連, 何が壊れる, 何が関係, blast radius, 変更前, 安全確認,
   セマンティック検索, グラフ検索, vault検索, コード検索,
-  スキル探索, プロンプト最適化, パイプライン, 実行計画
+  スキル探索, プロンプト最適化, パイプライン, 実行計画,
+  マルチエージェント, gni first, dag, 並行実装, 監査駆動, ログ駆動,
+  self-improving, cycle, フィードバックループ, orchestration
 runtime: claude-code   # also: openclaw (see skills/openclaw/SKILL.md)
+integrates:
+  - gni-first-agent-orchestration  # Phase C: GNI Impact First + DAG
+  - task-dag-planner               # Phase C: tasks.json + task-sync.sh
+  - aria-ldd-add                   # Phase E: project_memory audit trail
+  - cycle-ops                      # Phase E: feedback loop (npx miyabi cycle)
+  - multi-agent-orchestration      # Phase D: Codex/OpenClaw role matrix
+  - self-improving-skills          # Phase E: skill-runs → SKILL.md update
+  - gitnexus-impact-analysis       # Phase A2a: blast radius
+  - obsidian-gni                   # Phase A2b: wikilink graph
+  - agent-teams                    # Phase D: parallel sub-agents
 ---
 
-# Context & Impact — Context-to-Execution 完全パイプライン
+# Context & Impact v3.0 — The Universal Context-to-Execution Pipeline
 
-## 全体アーキテクチャ
+> **ゴールデン原則**: 「GNI なしに DAG は作れない。DAG なしにエージェントは動かさない。
+> コンテキストなしにタスクは始まらない。」
+
+## 全体アーキテクチャ（5フェーズ）
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  PHASE D: Feedback Loop（フィードバック）                         │
-│  record-run → score → flagged → auto-improve                     │
+│  PHASE E: Feedback & Self-Improvement                            │
+│  ARIA project_memory + cycle-ops + self-improving-skills         │
+│  worklog.md → audit_registry.json → SKILL.md 自動更新           │
 ├──────────────────────────────────────────────────────────────────┤
-│  PHASE C: Execution（スキル探索・実行）                           │
-│  ~/.claude/skills/  agentskills.io  OpenClaw 39 agents           │
-│  npx agent-skill-bus enqueue/dispatch                            │
+│  PHASE D: Multi-Agent Execution（マルチエージェント実行）         │
+│  Claude Code (Orchestrator) + Codex (Implementor)               │
+│  + OpenClaw 39 agents + agent-teams parallel sub-agents          │
 ├──────────────────────────────────────────────────────────────────┤
-│  PHASE B: Prompt Engineering（コンテキスト品質向上）              │
+│  PHASE C: GNI-First DAG Planning（実行計画）                     │
+│  GNI blast radius → 競合マトリクス → tasks.json DAG              │
+│  task-dag-planner + gni-first-agent-orchestration                │
+├──────────────────────────────────────────────────────────────────┤
+│  PHASE B: Context Quality Engineering（品質保証）                │
 │  Context Engineering MCP (optional / 高精度タスク時)             │
 │  analyze_context → auto_optimize_context → render_template       │
 ├──────────────────────────────────────────────────────────────────┤
-│  PHASE A: Context Assembly（4層コンテキスト収集）                 │
+│  PHASE A: Context Assembly（5層コンテキスト収集）                 │
 │  ─────────────────────────────────────────────────────────────  │
-│  Layer 3: Smart Connections（セマンティック）                     │
+│  Layer 3: Smart Connections（セマンティックベクトル検索）         │
 │           Obsidian vault 4,685+ notes / bge-micro-v2             │
 │  ─────────────────────────────────────────────────────────────  │
 │  Layer 2b: GitNexus Obsidian（wikilink グラフ / KùzuDB）         │
-│  Layer 2a: GitNexus Code（コールグラフ / インパクト分析）         │
+│  Layer 2a: GitNexus Code（コールグラフ / blast radius）           │
 │  ─────────────────────────────────────────────────────────────  │
 │  Layer 1: Glob / Grep（完全一致・正規表現）                       │
+│  ─────────────────────────────────────────────────────────────  │
+│  Layer 0: project_memory/（ARIA 永続状態 / 前回実行ログ）         │
 └──────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## スキルコンステレーション（統合スキル全体図）
+
+```
+                    ┌─────────────────────┐
+                    │  context-and-impact │ ← 本スキル（ハブ）
+                    │     v3.0.0          │
+                    └──────────┬──────────┘
+           ┌───────────────────┼───────────────────┐
+           ▼                   ▼                   ▼
+    ┌─────────────┐   ┌─────────────────┐  ┌──────────────┐
+    │  PHASE A    │   │   PHASE C/D     │  │   PHASE E    │
+    │  コンテキスト│   │   実行計画+実行  │  │ フィードバック│
+    ├─────────────┤   ├─────────────────┤  ├──────────────┤
+    │gitnexus-    │   │gni-first-agent- │  │aria-ldd-add  │
+    │impact-      │   │orchestration    │  │              │
+    │analysis     │   ├─────────────────┤  ├──────────────┤
+    ├─────────────┤   │task-dag-planner │  │cycle-ops     │
+    │obsidian-gni │   ├─────────────────┤  ├──────────────┤
+    ├─────────────┤   │multi-agent-     │  │self-improving│
+    │gitnexus-    │   │orchestration    │  │-skills       │
+    │exploring    │   ├─────────────────┤  └──────────────┘
+    ├─────────────┤   │agent-teams      │
+    │gitnexus-    │   ├─────────────────┤
+    │debugging    │   │githubops-       │
+    └─────────────┘   │workflow         │
+                      └─────────────────┘
 ```
 
 ---
@@ -263,13 +315,194 @@ npx agent-skill-bus record-run \
 
 ---
 
-## PHASE D: Feedback Loop（自己改善）
+## PHASE C: GNI-First DAG Planning（実行計画）
+
+> **統合スキル**: `gni-first-agent-orchestration` + `task-dag-planner`
+
+### C-1: Blast Radius 表の作成（変更前に必須）
+
+```bash
+# 全変更シンボルについて GNI Impact を実行
+gitnexus impact AuthController --direction upstream --max-depth 3
+gitnexus impact AuthService --direction upstream --max-depth 3
+
+# Blast Radius 表を作成（例）
+# | タスク | シンボル     | リスク   | d=1 影響数 | アクション    |
+# | T001  | AuthController | MEDIUM  | 8          | テスト追加    |
+# | T002  | AuthService    | HIGH    | 16         | 段階マージ    |
+```
+
+### C-2: 競合マトリクスの作成
+
+```
+同じシンボルが d=1 に現れる → 直列化
+CRITICAL リスク → 先にシグネチャ確定してから後続実装
+LOW リスク → 並行可
+```
+
+### C-3: tasks.json DAG 設計
+
+```json
+{
+  "tasks": [
+    {
+      "id": "T001",
+      "title": "AuthController リファクタリング",
+      "agent": "kotowari-dev",
+      "risk": "MEDIUM",
+      "depends_on": []
+    },
+    {
+      "id": "T002",
+      "title": "TokenRefreshController 更新（T001依存）",
+      "agent": "kotowari-dev",
+      "risk": "LOW",
+      "depends_on": ["T001"]
+    }
+  ]
+}
+```
+
+```bash
+# 次の実行可能タスクを取得（task-dag-planner）
+AGENT/task-sync.sh next
+
+# タスクをキューに投入（依存関係付き）
+npx agent-skill-bus enqueue \
+  --source human --priority high \
+  --agent kotowari-dev \
+  --task "T001: AuthController" \
+  --depends-on ""
+
+npx agent-skill-bus enqueue \
+  --source human --priority high \
+  --agent kotowari-dev \
+  --task "T002: TokenRefreshController" \
+  --depends-on "T001"
+```
+
+---
+
+## PHASE D: Multi-Agent Execution（マルチエージェント実行）
+
+> **統合スキル**: `multi-agent-orchestration` + `agent-teams` + `openclaw-agents`
+
+### D-1: 役割分担マトリクス（絶対ルール）
+
+```
+┌─────────────────────────────────────────┐
+│ Claude Code (Orchestrator) ← 本スキルの主体
+│ ✅ コンテキスト収集・DAG 設計           │
+│ ✅ Codex へのタスク投入                 │
+│ ✅ 成果物レビュー・ARIA 監査            │
+│ ✅ Git 操作（コミット・PR）             │
+│ ✅ OpenClaw エージェント指示            │
+│ ❌ コーディング（Codex に委任）         │
+├─────────────────────────────────────────┤
+│ Codex (Implementor)                     │
+│ ✅ コード実装・バグ修正・テスト         │
+│ ✅ リファクタリング・型エラー修正       │
+│ ❌ アーキテクチャ設計                   │
+│ ❌ git push / PR 作成                   │
+├─────────────────────────────────────────┤
+│ OpenClaw 39 Agents                      │
+│ ✅ SNS 投稿・コンテンツ生成             │
+│ ✅ 3D モデリング・PPAL 運用             │
+│ ✅ Telegram 通信・報告                  │
+└─────────────────────────────────────────┘
+```
+
+### D-2: エージェント選択基準
+
+| タスク種別 | 推奨エージェント | ノード |
+|-----------|-----------------|--------|
+| KOTOWARI 開発 | kotowari-dev (38) | MacBook Pro |
+| SNS 投稿・分析 | sns-creator (29) | MainMini |
+| コンテンツ生成 | content (2) | MacMini2 |
+| 3D モデリング | forge3d (13) | Mini3 |
+| Claude Code 連携 | cc-hayashi (37) | MacBook Pro |
+| プロンプト最適化 | promptpro (11) | MacMini2 |
+| 汎用 | main (0) | Windows Gateway |
+
+### D-3: 実行コマンド
+
+```bash
+# CPU idle 確認（50%以上が必要）
+top -l 1 | grep "CPU usage"
+
+# OpenClaw エージェントへのディスパッチ
+openclaw agent message kotowari-dev "[TASK] {context付きタスク}"
+
+# agent-teams を使った並列サブエージェント起動（Claude Code 内）
+# → Claude Code の Agent Tool で並行タスクを起動
+# 最大2並列（CPU負荷に注意）
+
+# 完了通知
+openclaw agent message main "[DONE] T001 完了 → 次: T002"
+```
+
+### D-4: 実行結果記録（必須）
+
+```bash
+npx agent-skill-bus record-run \
+  --agent {agent-id} \
+  --skill context-and-impact \
+  --task "{タスク概要}" \
+  --result {success|fail|partial} \
+  --score {0.0-1.0}
+```
+
+---
+
+## PHASE E: Feedback & Self-Improvement（監査・自己改善）
+
+> **統合スキル**: `aria-ldd-add` + `cycle-ops` + `self-improving-skills`
+
+### E-1: ARIA 監査トレイル（project_memory/）
+
+```
+project_memory/
+  logs/worklog.md              ← 実行ログ（一次根拠）
+  runlogs/{ts}-{op}.txt        ← 1コマンド = 1ファイル
+  audit/audit_registry.json    ← 監査ルール台帳
+  state/aria_state.json        ← ループ状態（loop_id, stage）
+```
+
+```bash
+# ARIA 初期化（プロジェクト初回）
+bash ~/dev/tools/aria-ldd-add/scripts/aria-init.sh ~/dev/tools/context-and-impact/
+
+# worklog.md に実行ログを追記
+echo "## $(date '+%Y-%m-%d %H:%M') context-and-impact W5 実行
+- Phase A: L3→L2b→L2a→L1 コンテキスト収集完了
+- Phase C: DAG 設計、kotowari-dev に T001/T002 を投入
+- Phase D: T001 完了確認、T002 実行中
+" >> project_memory/logs/worklog.md
+```
+
+### E-2: cycle-ops フィードバックループ
+
+```bash
+# フルサイクル（1回）
+npx miyabi cycle full
+
+# 連続自動サイクル（5分間隔）
+npx miyabi cycle auto
+
+# 個別フェーズ
+npx miyabi cycle check      # インフラ・スキル状態検知
+npx miyabi cycle dispatch   # キューから次タスク取得
+npx miyabi cycle health     # スキルヘルスチェック
+npx miyabi cycle report     # 音声で結果報告
+```
+
+### E-3: self-improving-skills ループ
 
 ```bash
 # スコア低下スキルを確認
 npx agent-skill-bus flagged
 
-# 自動改善実行
+# 自動改善実行（OBSERVE→ANALYZE→DIAGNOSE→PROPOSE→EVALUATE→APPLY→RECORD）
 npx agent-skill-bus improve --skill context-and-impact
 
 # 直近の実行履歴
@@ -278,7 +511,7 @@ npx agent-skill-bus dashboard --days 7
 
 ---
 
-## 統合ワークフロー例
+## 統合ワークフロー例（W1〜W6）
 
 ### W1: コード変更前の完全チェック（最重要）
 
@@ -412,6 +645,43 @@ gitnexus status --repo obsidian
 
 ---
 
+### W6: ARIA監査付き完全自動ループ（最高精度モード）
+
+```bash
+# === 事前: project_memory 初期化 ===
+bash ~/dev/tools/aria-ldd-add/scripts/aria-init.sh .
+
+# === PHASE A: Layer 0 → 前回ログを参照 ===
+cat project_memory/logs/worklog.md | tail -30
+
+# === PHASE A: L3 → L1 コンテキスト収集 ===
+QUERY="認証リファクタリング JWT" python3 src/cli/semantic-search.py --limit 8
+gitnexus cypher --repo obsidian "MATCH (f:File) WHERE f.name CONTAINS 'auth' RETURN f.name LIMIT 10"
+gitnexus impact AuthService --direction upstream --max-depth 3
+grep -rn "AuthService" ~/dev/products/kotowari/src/ | head -10
+
+# === PHASE C: GNI-First DAG 設計 ===
+# (blast radius 確認 → tasks.json 作成 → task-sync.sh で順序確定)
+cat << 'EOF' > project_memory/tasks.json
+{"tasks": [{"id": "T001", "title": "AuthService 移行", "agent": "kotowari-dev", "depends_on": []}]}
+EOF
+
+# === PHASE D: 実行 + 記録 ===
+openclaw agent message kotowari-dev "[TASK] #T001 AuthService JWT→Session移行。GNI Risk: MEDIUM。依存: LoginController, TokenRefreshController"
+npx agent-skill-bus record-run --agent kotowari-dev --skill context-and-impact --task "T001 AuthService" --result success --score 0.93
+
+# === PHASE E: ARIA 監査ログ追記 ===
+echo "## $(date '+%Y-%m-%d %H:%M') W6 完了
+- T001: AuthService 移行完了 (score: 0.93)
+- GNI blast radius: MEDIUM (8 symbols)
+" >> project_memory/logs/worklog.md
+
+# === PHASE E: cycle-ops フィードバック ===
+npx miyabi cycle full
+```
+
+---
+
 ## 設定情報
 
 | サービス | パス | 備考 |
@@ -421,7 +691,9 @@ gitnexus status --repo obsidian
 | GNI repo (obsidian) | GNI内部 | 5,824ノード / 5,995エッジ |
 | Context Engineering MCP | `~/dev/platform/_mcp/context_engineering_MCP/` | 要別途起動 |
 | Agent Skill Bus | `~/dev/tools/agent-skill-bus/` | `npx agent-skill-bus` |
+| ARIA ldd-add | `~/dev/tools/aria-ldd-add/` | project_memory/ 管理 |
 | agentskills.io | https://agentskills.io | 110+ スキル |
+| GitHub | https://github.com/ShunsukeHayashi/context-and-impact | 公開リポジトリ |
 
 ---
 
@@ -434,4 +706,4 @@ gitnexus status --repo obsidian
 
 ---
 
-*バージョン: 2.0.0 | 最終更新: 2026-03-24*
+*バージョン: 3.0.0 | 最終更新: 2026-03-24 | GitHub: ShunsukeHayashi/context-and-impact*

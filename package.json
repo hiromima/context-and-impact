@@ -1,7 +1,7 @@
 {
   "name": "context-and-impact",
-  "version": "2.0.0",
-  "description": "4層コンテキスト収集 × Agent Skill Bus × GitNexus 統合パイプライン",
+  "version": "3.0.0",
+  "description": "The Universal Context-to-Execution Pipeline for AI Agents",
   "type": "module",
   "scripts": {
     "status": "python3 src/cli/semantic-search.py --status",
@@ -16,12 +16,18 @@
     "lint": "echo 'No lint configured'"
   },
   "keywords": [
+    "ai-agent",
     "context-engineering",
-    "agent-skill-bus",
+    "knowledge-graph",
+    "semantic-search",
     "gitnexus",
     "obsidian",
-    "semantic-search",
-    "miyabi"
+    "agent-skill-bus",
+    "workflow-automation",
+    "claude",
+    "llm",
+    "blast-radius",
+    "multi-agent"
   ],
   "author": "Hayashi Shunsuke <shunsuke@ambitiousai.co.jp>",
   "license": "MIT",
