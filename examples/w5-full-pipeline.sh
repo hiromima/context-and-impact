@@ -233,7 +233,7 @@ if not tasks:
     })
 
 output = {
-    "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+    "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     "query": "${QUERY}",
     "repo": "${REPO}",
     "quality_score": ${QUALITY_SCORE},
