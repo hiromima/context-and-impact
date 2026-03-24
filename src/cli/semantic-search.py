@@ -44,8 +44,9 @@ def search(query: str, limit: int = 10):
 
 def status():
     db = get_db()
-    embedded = sum(1 for v in db.db.values() if v.get("embeddings"))
-    total = len(db.db)
+    cache = db.embeddings_cache
+    total = len(cache)
+    embedded = sum(1 for v in cache.values() if v.get("vector") is not None)
     print(f"Obsidian vault: {OBSIDIAN_VAULT}")
     print(f"Total notes: {total}")
     print(f"Embedded: {embedded}")

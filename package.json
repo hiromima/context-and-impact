@@ -1,6 +1,6 @@
 {
   "name": "context-and-impact",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "The Universal Context-to-Execution Pipeline for AI Agents",
   "type": "module",
   "scripts": {
