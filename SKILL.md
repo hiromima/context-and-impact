@@ -1,6 +1,6 @@
 ---
 name: context-and-impact
-version: 3.0.0
+version: 3.1.0
 description: >
   The Universal Context-to-Execution Pipeline.
   最強統合スキル: コンテキスト収集（5層）→ 品質保証 → GNI-First DAG計画 →
@@ -40,7 +40,7 @@ integrates:
   - miyabi-omega                   # Phase A-E対応パイプライン（6段階↔5フェーズ）
 ---
 
-# Context & Impact v3.0 — The Universal Context-to-Execution Pipeline
+# Context & Impact v3.1 — The Universal Context-to-Execution Pipeline
 
 > **ゴールデン原則**: 「GNI なしに DAG は作れない。DAG なしにエージェントは動かさない。
 > コンテキストなしにタスクは始まらない。」
@@ -86,7 +86,7 @@ integrates:
 ```
                     ┌─────────────────────┐
                     │  context-and-impact │ ← 本スキル（ハブ）
-                    │     v3.0.0          │
+                    │     v3.1.0          │
                     └──────────┬──────────┘
            ┌───────────────────┼───────────────────┐
            ▼                   ▼                   ▼
@@ -113,15 +113,18 @@ integrates:
 
 ## ゴールデンルール：どの層を使うか
 
-| やりたいこと | 使う層 | ツール（Claude Code） | ツール（OpenClaw CLI） |
-|-------------|--------|----------------------|-----------------------|
+| やりたいこと | 使う層 | ツール（Claude Code） | ツール（OpenClaw / CLI） |
+|-------------|--------|----------------------|------------------------|
 | 概念・意味でノートを探す | L3 | `mcp__smart-connections__semantic_search` | `src/cli/semantic-search.py` |
-| このノートが変わると何が影響を受けるか | L2b | `gitnexus_cypher` (wikilink) | `gitnexus cypher --repo obsidian` |
+| このノートが変わると何が影響を受けるか | L2b | `gitnexus_cypher` (wikilink) | `python3 src/cli/wikilink-search.py --impact <file>` |
+| Obsidian wikilink グラフを探索 | L2b | `gitnexus_cypher` | `python3 src/cli/wikilink-search.py --find <kw>` |
 | コードのXを変えたら何が壊れるか | L2a | `gitnexus_impact` | `gitnexus impact <symbol>` |
-| ファイル名でファイルを探す | L1 | `Glob` | `find ~/dev -name "*keyword*"` |
-| テキストを含むファイルを探す | L1 | `Grep` | `grep -rl "keyword" ~/dev/` |
+| ファイル名でファイルを探す | L1 | `Glob` | `bash src/cli/l1-keyword-search.sh <kw>` |
+| テキストを含むファイルを探す | L1 | `Grep` | `npm run l1 <kw>` |
+| Obsidian ノートをテキスト検索 | L1 | `Grep` | `npm run l1:obsidian <kw>` |
 | コード+ドキュメント横断調査 | L2a+L3 | 並行実行 | 並行実行 |
 | コンテキスト品質を評価・最適化 | Phase B | Context Engineering MCP | curl /analyze |
+| 孤立ノートを有機的にリンキング | W6 | `bash examples/w6-orphan-linking.sh --auto` | `npm run w6 -- --auto` |
 
 ---
 
@@ -130,9 +133,20 @@ integrates:
 ### Layer 1: Glob / Grep（基盤層）
 
 常に利用可能。他の層で見つけた候補の詳細確認に使う。
+`src/cli/l1-keyword-search.sh` が L1 統合 CLI（ripgrep/grep 自動選択）。
 
 ```bash
-# ファイル名検索
+# L1 統合 CLI（推奨）
+bash src/cli/l1-keyword-search.sh "auth"               # コード検索
+bash src/cli/l1-keyword-search.sh "auth" --type ts     # TypeScript のみ
+bash src/cli/l1-keyword-search.sh "認証" --obsidian    # Obsidian vault
+bash src/cli/l1-keyword-search.sh "auth" --json        # JSON 出力
+
+# npm scripts
+npm run l1 -- "auth"             # コード検索
+npm run l1:obsidian -- "認証"   # Obsidian 検索
+
+# 従来の方法（Claude Code 内）
 find ~/dev/content/obsidian -name "*{キーワード}*" -type f | head -20
 
 # テキスト内容検索（Obsidian vault）
@@ -770,6 +784,26 @@ echo "## $(date '+%Y-%m-%d %H:%M') W6 完了
 npx miyabi cycle full
 ```
 
+### W6-Obsidian: Obsidian オーファン有機的リンキング（定期メンテナンス）
+
+孤立ノートを L2b（Cypher）で検出し L3（意味的類似）でリンク候補を提案。
+
+```bash
+# 週次: 全ドメインのオーファンを自動リンキング（候補出力のみ）
+bash examples/w6-orphan-linking.sh --auto
+
+# 特定ドメインのオーファンを確認
+bash examples/w6-orphan-linking.sh --domain Docs-Legal --limit 10
+
+# Python CLI で直接確認
+python3 src/cli/wikilink-search.py --orphans --domain Docs-OpenClaw
+
+# cron 設定例（毎週月曜 9:00）
+# 0 9 * * 1 bash ~/dev/tools/context-and-impact/examples/w6-orphan-linking.sh --auto
+```
+
+詳細ドキュメント: `examples/w6-orphan-linking.sh` / `docs/agent-guide.md`
+
 ---
 
 ## miyabi-omega との 1:1 マッピング
@@ -813,6 +847,8 @@ miyabi-omega の6段階           context-and-impact の対応フェーズ
 | GNI repo (obsidian) | GNI内部 | 5,824ノード / 5,995エッジ |
 | Context Engineering MCP | `~/dev/platform/_mcp/context_engineering_MCP/` | 要別途起動 |
 | Agent Skill Bus | `~/dev/tools/agent-skill-bus/` | `npx agent-skill-bus` |
+| 統合テスト | `src/skill-bus/test-integration.sh` | `bash src/skill-bus/test-integration.sh` |
+| 命名規則ガイド | `docs/naming-guide.md` | エージェント命名・Progressive Disclosure 設計 |
 | ARIA ldd-add | `~/dev/tools/aria-ldd-add/` | project_memory/ 管理 |
 | agentskills.io | https://agentskills.io | 110+ スキル |
 | GitHub | https://github.com/ShunsukeHayashi/context-and-impact | 公開リポジトリ |
@@ -828,4 +864,4 @@ miyabi-omega の6段階           context-and-impact の対応フェーズ
 
 ---
 
-*バージョン: 3.0.0 | 最終更新: 2026-03-24 | GitHub: ShunsukeHayashi/context-and-impact*
+*バージョン: 3.1.0 | 最終更新: 2026-03-24 | GitHub: ShunsukeHayashi/context-and-impact*
