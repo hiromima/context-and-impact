@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-03-24T03:29:54.935016Z",
+  "query": "認証",
+  "repo": "kotowari",
+  "quality_score": 100,
+  "tasks": [
+    {
+      "id": "task-1",
+      "label": "Implement: 認証",
+      "agent": "kaede",
+      "depends_on": [],
+      "status": "pending"
+    }
+  ]
+}

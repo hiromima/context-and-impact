@@ -6,7 +6,7 @@
 
 [![GitHub Issues](https://img.shields.io/github/issues/ShunsukeHayashi/context-and-impact)](https://github.com/ShunsukeHayashi/context-and-impact/issues)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-3.0.0-brightgreen)](https://github.com/ShunsukeHayashi/context-and-impact/releases)
+[![Version](https://img.shields.io/badge/version-3.1.0-brightgreen)](https://github.com/ShunsukeHayashi/context-and-impact/releases)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D24.0.0-green)](https://nodejs.org/)
 [![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-Skill-purple)](SKILL.md)
 
@@ -95,9 +95,25 @@ bash examples/w1-keyword-search.sh "authMiddleware"
 # W2: Code impact analysis
 bash examples/w2-impact-analysis.sh authMiddleware my-project
 
-# W5: Full pipeline (all phases)
+# W5: Full pipeline (Pre-A → A → B → C → D → E)
 bash examples/w5-full-pipeline.sh "JWT auth refactor" my-project
+
+# Override quality gate threshold
+QUALITY_SCORE=85 bash examples/w5-full-pipeline.sh "feature" my-project
+
+# Force-proceed even if quality_score < 70
+FORCE=1 bash examples/w5-full-pipeline.sh "hotfix" my-project
 ```
+
+### v3.1.0 changes
+
+| Phase | What's new |
+|-------|-----------|
+| **Pre-A** | `gitnexus status` stale check → auto reindex |
+| **B** | Real `quality_score` (0–100) with threshold gates (≥85 / 70–84 / <70) |
+| **C** | GNI blast radius → `project_memory/tasks.json` DAG auto-generation |
+| **D** | ai-triad role matrix from DAG (parallel vs sequential tasks) |
+| **E** | ARIA `worklog.md` audit trail + `cycle-ops` + self-improve score |
 
 ---
 
@@ -105,7 +121,7 @@ bash examples/w5-full-pipeline.sh "JWT auth refactor" my-project
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                  context-and-impact v3.0.0                      │
+│                  context-and-impact v3.1.0                      │
 │                                                                 │
 │  Phase A: Context Assembly                                      │
 │  ┌─────┐  ┌──────┐  ┌──────────────────┐  ┌────────────────┐  │
