@@ -1,9 +1,9 @@
 ---
 name: context-and-impact
-version: 2.0.0
+version: 3.1.0
 runtime: openclaw
 description: |
-  4層コンテキスト収集 + Agent Skill Bus + GitNexus 統合パイプライン。
+  5層コンテキスト収集 + Agent Skill Bus + GitNexus 統合パイプライン。
   OpenClaw エージェント（CLI）専用。
 triggers:
   - context
@@ -14,7 +14,7 @@ triggers:
   - skill bus
 ---
 
-# context-and-impact — OpenClaw スキル v2.0.0
+# context-and-impact — OpenClaw スキル v3.1.0
 
 ## このスキルが行うこと
 
@@ -62,7 +62,19 @@ RETURN doc.name, collect(DISTINCT inbound.name) AS referenced_by
 ```
 
 **L3（セマンティック検索）**
+
+> **⚠️ Python 3.14 非対応**: `torch` / `sentence_transformers` が Python 3.14 で
+> SIGSEGV クラッシュする。`semantic-search.py` は python3.11 サブプロセスを
+> 自動選択するため、**必ず CLI を使うこと**。
+
 ```bash
+# 状態確認（埋め込みノート数・モデル確認）
+python3 ~/dev/tools/context-and-impact/src/cli/semantic-search.py --status
+
+# 検索（推奨）
+python3 ~/dev/tools/context-and-impact/src/cli/semantic-search.py --query "{クエリ}" --limit 10
+
+# 環境変数でも可
 QUERY="{クエリ}" python3 ~/dev/tools/context-and-impact/src/cli/semantic-search.py
 ```
 
@@ -124,7 +136,7 @@ gitnexus cypher --repo obsidian \
 |--------|------|--------|
 | Windows Gateway | xurl 依存、Python 要確認 | semantic-search.py は MacBook Pro で実行 |
 | MainMini | gitnexus 利用可 | 通常通り |
-| MacBook Pro | 全層利用可 | 最も完全な環境 |
+| MacBook Pro | 全層利用可、python3.11 必須 | L3 は python3.11 サブプロセス自動選択（python3.14 は torch SIGSEGV）|
 | Mini3 | ディスク逼迫、3D専用 | context-and-impact は使わない |
 
 ---
@@ -147,6 +159,7 @@ npx agent-skill-bus improve --skill context-and-impact
 ## 注意事項
 
 - Mini3 は 3D 専用ノード（context-and-impact は MainMini or MacBook Pro で実行）
+- **Python 3.14 + torch = SIGSEGV クラッシュ**: `mcp__smart-connections__semantic_search` も同問題で使用不可。`semantic-search.py` は python3.11 サブプロセスを自動選択するため CLI 経由で使うこと
 - KùzuDB `split()` 非対応 → `STARTS WITH` 使用
 - wikilink エッジは `reason = 'obsidian-wikilink'` フィルタ必須
 - Anthropic 429 時は Gemini フォールバック利用（自動）

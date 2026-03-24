@@ -68,7 +68,7 @@ integrates:
 │  PHASE A: Context Assembly（5層コンテキスト収集）                 │
 │  ─────────────────────────────────────────────────────────────  │
 │  Layer 3: Smart Connections（セマンティックベクトル検索）         │
-│           Obsidian vault 4,685+ notes / bge-micro-v2             │
+│           Obsidian vault 4,875+ notes / bge-micro-v2             │
 │  ─────────────────────────────────────────────────────────────  │
 │  Layer 2b: GitNexus Obsidian（wikilink グラフ / KùzuDB）         │
 │  Layer 2a: GitNexus Code（コールグラフ / blast radius）           │
@@ -115,7 +115,7 @@ integrates:
 
 | やりたいこと | 使う層 | ツール（Claude Code） | ツール（OpenClaw / CLI） |
 |-------------|--------|----------------------|------------------------|
-| 概念・意味でノートを探す | L3 | `mcp__smart-connections__semantic_search` | `src/cli/semantic-search.py` |
+| 概念・意味でノートを探す | L3 | `python3 src/cli/semantic-search.py --query "..."` | `npm run search -- --query "..."` |
 | このノートが変わると何が影響を受けるか | L2b | `gitnexus_cypher` (wikilink) | `python3 src/cli/wikilink-search.py --impact <file>` |
 | Obsidian wikilink グラフを探索 | L2b | `gitnexus_cypher` | `python3 src/cli/wikilink-search.py --find <kw>` |
 | コードのXを変えたら何が壊れるか | L2a | `gitnexus_impact` | `gitnexus impact <symbol>` |
@@ -248,17 +248,26 @@ RETURN f.name, f.filePath LIMIT 20
 > # → 24時間以上前の場合: obsidian-knowledge スキルで同期後に L3 検索
 > # → 新鮮な場合: そのまま L3 セマンティック検索へ
 > ```
-> L3 ベクトルインデックス（4,685+ ノード）を最新状態で使うため、
+> L3 ベクトルインデックス（4,875+ ノード）を最新状態で使うため、
 > Vault に大量追加があった場合は Obsidian の Smart Connections プラグインで
 > 再インデックスを実行してから L3 を使用すること。
 
-Claude Code での使用:
-```
-mcp__smart-connections__semantic_search({"query": "合同会社みやび 設立 必要書類", "limit": 10})
-```
+> **⚠️ Python 3.14 非対応**: `torch` / `sentence_transformers` が Python 3.14 で
+> SIGSEGV クラッシュする。`src/cli/semantic-search.py` は python3.11 サブプロセスを
+> 自動選択するため、**CLIを使うこと**。`mcp__smart-connections__semantic_search`
+> は同問題で使用不可（Python 3.14 環境では常にクラッシュ）。
 
-OpenClaw CLI での使用（`src/cli/semantic-search.py` 参照）:
+すべての環境での使用（推奨）:
 ```bash
+# ステータス確認
+npm run status
+python3 src/cli/semantic-search.py --status
+
+# 検索（引数はクォートで囲む）
+npm run search -- --query "合同会社みやび 設立 必要書類" --limit 10
+python3 src/cli/semantic-search.py --query "合同会社みやび 設立 必要書類"
+
+# 環境変数でも可
 QUERY="合同会社みやび 設立 必要書類" python3 src/cli/semantic-search.py
 ```
 
@@ -842,8 +851,8 @@ miyabi-omega の6段階           context-and-impact の対応フェーズ
 
 | サービス | パス | 備考 |
 |---------|------|------|
-| Smart Connections MCP | `~/dev/tools/smart-connections-mcp/` | MacBook Pro ローカル |
-| Obsidian Vault | `~/dev/content/obsidian/` | 4,685件 埋め込み済み |
+| Smart Connections MCP | `~/dev/tools/smart-connections-mcp/` | ⚠️ Python 3.14 非対応 → CLI を使用 |
+| Obsidian Vault | `~/dev/content/obsidian/` | 4,875件 埋め込み済み |
 | GNI repo (obsidian) | GNI内部 | 5,824ノード / 5,995エッジ |
 | Context Engineering MCP | `~/dev/platform/_mcp/context_engineering_MCP/` | 要別途起動 |
 | Agent Skill Bus | `~/dev/tools/agent-skill-bus/` | `npx agent-skill-bus` |
