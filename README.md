@@ -286,3 +286,5 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 MIT License — see [LICENSE](LICENSE) for details.
 
 Copyright (c) 2026 Hayashi Shunsuke / Miyabi Society
+
+<!-- Copilot Coding Agent dry-run test: verified 2026-03-24 -->
