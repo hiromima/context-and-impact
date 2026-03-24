@@ -6,7 +6,8 @@
 
 [![GitHub Issues](https://img.shields.io/github/issues/ShunsukeHayashi/context-and-impact)](https://github.com/ShunsukeHayashi/context-and-impact/issues)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-3.1.0-brightgreen)](https://github.com/ShunsukeHayashi/context-and-impact/releases)
+[![Version](https://img.shields.io/badge/version-3.2.0-brightgreen)](https://github.com/ShunsukeHayashi/context-and-impact/releases)
+[![Tests](https://img.shields.io/badge/tests-64%20passed-brightgreen)](#testing)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D24.0.0-green)](https://nodejs.org/)
 [![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-Skill-purple)](SKILL.md)
 
@@ -28,8 +29,12 @@ Then it plans and executes through **5 phases**:
 
 ```
 PHASE A: Context Assembly  →  PHASE B: Quality Gate  →  PHASE C: GNI-First DAG
+ A-0: Temporal Decay            B-0: Ensemble Gate             ↓
+ A-5: RRF Fusion                (3 parallel LLM judges)
+                                                      PHASE D: Multi-Agent Execution
+                                                       D-2: Multi-model Classifier
                                                                ↓
-PHASE E: ARIA Audit + Self-Improvement  ←  PHASE D: Multi-Agent Execution
+PHASE E: ARIA Audit + Self-Improvement  ←──────────────────────┘
 ```
 
 ---
@@ -43,6 +48,10 @@ Most AI pipelines start with a prompt. This one starts with **understanding**.
 | Blind code changes | Agent modifies a shared utility, breaks 12 downstream callers | Blast radius analyzed first; only safe changes proceed |
 | Context drift | Each agent run starts from zero | `project_memory/` carries state across sessions |
 | Shallow search | LLM guesses from training data | Semantic + graph search over your actual codebase |
+| Stale context | Old decisions outweigh recent ones | Temporal decay scores older entries lower (49.7% at 7 days) |
+| Single-source ranking | L1 noise drowns out real hits | RRF fuses L1+L2b+L3 scores — `1/(k+rank)`, k=60 |
+| Subjective quality gates | One LLM judge has high variance | 3-judge ensemble; stddev > 20 → collect_more |
+| Wrong agent for the task | Every task goes to one agent | 3-model majority vote routes fix→cursor / feat→copilot |
 | Cascading failures | One wrong change triggers chain of errors | Dependency DAG computed before any execution |
 | No feedback loop | Same mistakes repeated | ARIA audit records every run; skills self-improve |
 
@@ -110,6 +119,23 @@ gitnexus cypher --repo obsidian \
 # L3: Semantic search — conceptually related notes
 python3 src/cli/semantic-search.py --query "JWT authentication design" --limit 10
 
+# A-0: Temporal decay — score worklog.md entries by recency
+python3 src/cli/temporal-score.py --worklog project_memory/worklog.md \
+  --query "auth refactor" --limit 5
+
+# A-5: RRF fusion — merge L1 + L2b + L3 result files
+python3 src/cli/rrf-merge.py \
+  --l1 /tmp/ctx-l1.json --l2b /tmp/ctx-l2b.json --l3 /tmp/ctx-l3.json \
+  --limit 20
+
+# B-0: Ensemble quality gate — 3-judge scoring
+python3 src/quality/ensemble-judge.py \
+  --task "refactor auth module" --context "$(cat /tmp/ctx-rrf.json)" \
+  --model claude-haiku-4-5-20251001
+
+# D-2: Task classifier — route to the right agent
+python3 src/routing/multi-classifier.py --task "fix: handle null response"
+
 # Agent Skill Bus dashboard
 npx agent-skill-bus dashboard
 ```
@@ -133,6 +159,16 @@ QUALITY_SCORE=85 bash examples/w5-full-pipeline.sh "feature" my-project
 FORCE=1 bash examples/w5-full-pipeline.sh "hotfix" my-project
 ```
 
+### v3.2.0 changes (aggregator-v1 sprint)
+
+| Phase | What's new | Module |
+|-------|-----------|--------|
+| **A-0** | Temporal Memory Decay — `exp(-0.1 × days)` scoring of `worklog.md` entries | `src/cli/temporal-score.py` |
+| **A-5** | RRF Fusion — fuse L1+L2b+L3 results via `1/(k+rank)`, k=60 | `src/cli/rrf-merge.py` |
+| **B-0** | Ensemble Quality Gate — 3 parallel LLM judges, stddev>20 → `collect_more` | `src/quality/ensemble_judge.py` |
+| **D-2** | Multi-model Task Classifier — 3-model majority vote routing | `src/routing/multi_classifier.py` |
+| **All** | 64 unit tests (13 RRF + 19 Temporal + 8 Ensemble + 24 Classifier) | `src/*/test_*.py` |
+
 ### v3.1.0 changes
 
 | Phase | What's new |
@@ -148,37 +184,41 @@ FORCE=1 bash examples/w5-full-pipeline.sh "hotfix" my-project
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                  context-and-impact v3.1.0                      │
-│                                                                 │
-│  Phase A: Context Assembly                                      │
-│  ┌─────┐  ┌──────┐  ┌──────────────────┐  ┌────────────────┐  │
-│  │ L1  │  │ L2a  │  │      L2b         │  │      L3        │  │
-│  │Grep │  │GitNx │  │GitNx + KùzuDB    │  │SmartConnect    │  │
-│  │Find │  │Code  │  │Obsidian wikilink  │  │Semantic Search │  │
-│  └──┬──┘  └──┬───┘  └────────┬─────────┘  └───────┬────────┘  │
-│     └────────┴───────────────┴────────────────────-┘           │
-│                        │                                        │
-│  Phase B: Quality Gate (Context Engineering MCP)               │
-│  ┌──────────────────────────────────────┐                       │
-│  │  quality_score < 70 → auto_optimize  │                       │
-│  └──────────────────────────────────────┘                       │
-│                        │                                        │
-│  Phase C: GNI-First DAG Planning                                │
-│  ┌──────────────────────────────────────┐                       │
-│  │  blast_radius → tasks.json → DAG    │                       │
-│  └──────────────────────────────────────┘                       │
-│                        │                                        │
-│  Phase D: Multi-Agent Execution                                 │
-│  ┌──────────────────────────────────────┐                       │
-│  │  Claude Code / Codex / OpenClaw      │                       │
-│  └──────────────────────────────────────┘                       │
-│                        │                                        │
-│  Phase E: ARIA Audit + Self-Improvement                         │
-│  ┌──────────────────────────────────────┐                       │
-│  │  worklog.md → cycle-ops → improve   │                       │
-│  └──────────────────────────────────────┘                       │
-└─────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────┐
+│                     context-and-impact v3.2.0                         │
+│                                                                       │
+│  Phase A: Context Assembly                                            │
+│  ┌──────────────────────────────────────────────────────────────┐     │
+│  │ A-0: Temporal Decay  │  L1   │  L2a  │    L2b    │    L3    │     │
+│  │ worklog.md entries   │ Grep  │ GitNx │ KùzuDB    │ Semantic │     │
+│  │ exp(-0.1×days) score │ Find  │ Code  │ wikilinks │  Search  │     │
+│  └──────────┬───────────┴───────┴───────┴───────────┴──────────┘     │
+│             │  A-5: RRF Fusion — 1/(k+rank), k=60                    │
+│             │  merge L1 + L2b + L3 into ranked unified list          │
+│             ▼                                                         │
+│  Phase B: Quality Gate                                                │
+│  ┌──────────────────────────────────────────────────────────────┐     │
+│  │ B-0: Ensemble Gate — 3 parallel LLM judges                   │     │
+│  │  avg_score ≥ 70 → proceed  │  stddev > 20 → collect_more     │     │
+│  └──────────────────────────────────────────────────────────────┘     │
+│             │                                                         │
+│  Phase C: GNI-First DAG Planning                                      │
+│  ┌──────────────────────────────────────────────────────────────┐     │
+│  │  blast_radius → tasks.json → dependency DAG                  │     │
+│  └──────────────────────────────────────────────────────────────┘     │
+│             │                                                         │
+│  Phase D: Multi-Agent Execution                                       │
+│  ┌──────────────────────────────────────────────────────────────┐     │
+│  │ D-2: Multi-model Classifier — 3-model majority vote          │     │
+│  │  fix/bug → cursor-agent  │  feat/docs/test → @copilot        │     │
+│  │  kaede/dev-coder → [auto] Pipeline  │  else → manual         │     │
+│  └──────────────────────────────────────────────────────────────┘     │
+│             │                                                         │
+│  Phase E: ARIA Audit + Self-Improvement                               │
+│  ┌──────────────────────────────────────────────────────────────┐     │
+│  │  worklog.md → cycle-ops → self-improve → Copilot PR monitor  │     │
+│  └──────────────────────────────────────────────────────────────┘     │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -201,10 +241,22 @@ context-and-impact/
 │       └── SKILL.md            # OpenClaw agent variant
 ├── src/
 │   ├── cli/
-│   │   └── semantic-search.py  # L3 SmartConnections CLI
+│   │   ├── semantic-search.py      # L3 SmartConnections CLI
+│   │   ├── rrf-merge.py            # A-5: RRF Aggregator (L1+L2b+L3 fusion)
+│   │   ├── temporal-score.py       # A-0: Temporal Memory Decay scorer
+│   │   ├── test_rrf_merge.py       # 13 unit tests
+│   │   └── test_temporal_score.py  # 19 unit tests
+│   ├── quality/
+│   │   ├── ensemble_judge.py       # B-0: Ensemble Quality Gate (importable)
+│   │   ├── ensemble-judge.py       # B-0: CLI shim
+│   │   └── test_ensemble_judge.py  # 8 unit tests
+│   ├── routing/
+│   │   ├── multi_classifier.py     # D-2: Multi-model Task Classifier
+│   │   ├── multi-classifier.py     # D-2: CLI wrapper
+│   │   └── test_multi_classifier.py # 24 unit tests
 │   ├── gitnexus/
-│   │   └── queries.md          # L2b Cypher query library
-│   └── skill-bus/              # Agent Skill Bus integration scripts
+│   │   └── queries.md              # L2b Cypher query library
+│   └── skill-bus/                  # Agent Skill Bus integration scripts
 │       ├── dispatch-recommend.sh
 │       ├── enqueue-task.sh
 │       └── record-run.sh
@@ -271,6 +323,24 @@ bash examples/w6-orphan-linking.sh
 
 ---
 
+## Testing
+
+All modules ship with unit tests. Run them with:
+
+```bash
+python3 -m pytest src/ -q
+# 64 passed in 0.07s
+```
+
+| Module | Tests | What's covered |
+|--------|-------|---------------|
+| `src/cli/rrf-merge.py` | 13 | Score formula, multi-layer merge, k parameter, edge cases |
+| `src/cli/temporal-score.py` | 19 | Decay curve, 0-day=1.000, 7-day=0.497, 30-day=0.050 |
+| `src/quality/ensemble_judge.py` | 8 | Fallback score=70, stddev gate, consensus=True |
+| `src/routing/multi_classifier.py` | 24 | fix→cursor-agent, feat→copilot, docs→copilot (100% accuracy) |
+
+---
+
 ## Skill Constellation
 
 `context-and-impact` is the **hub** that integrates 9 specialized skills:
@@ -278,7 +348,7 @@ bash examples/w6-orphan-linking.sh
 ```
              ┌──────────────────────────┐
              │    context-and-impact    │  ← Hub
-             │       (v3.0.0)           │
+             │       (v3.2.0)           │
              └──────────┬───────────────┘
                         │
       ┌─────────────────┼─────────────────┐
