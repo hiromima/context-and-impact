@@ -50,23 +50,51 @@ Most AI pipelines start with a prompt. This one starts with **understanding**.
 
 ## Quick Start
 
-### Prerequisites
-
-- **Node.js** v24+
-- **Python** 3.10+
-- **GitNexus CLI**: `npm install -g gitnexus`
-- **Agent Skill Bus**: `npm install -g agent-skill-bus`
-
-### Installation
+### 1. Clone and verify prerequisites
 
 ```bash
 git clone https://github.com/ShunsukeHayashi/context-and-impact.git
 cd context-and-impact
-npm install
-cp .env.example .env   # Configure your environment
+bash scripts/check-prerequisites.sh   # See what's available on your machine
 ```
 
-### Basic Usage
+The checker reports OK / WARN / FAIL for each dependency:
+
+| Layer | Required | Install if missing |
+|-------|----------|--------------------|
+| Core | Node.js v24+, git | `nvm install 24` |
+| L2a/L2b | gitnexus CLI | `npm install -g gitnexus` |
+| Phase C | agent-skill-bus | `npm install -g agent-skill-bus` |
+| Phase D (opt) | codex, gh CLI | `npm install -g @openai/codex` / [cli.github.com](https://cli.github.com) |
+
+WARN items are optional — the pipeline gracefully skips unavailable layers.
+FAIL items (Node.js, git) must be fixed before running.
+
+### 2. Configure environment
+
+```bash
+cp .env.example .env   # Copy template
+$EDITOR .env           # Set DEV_DIR, OBSIDIAN_DIR (optional)
+```
+
+Key variables (all optional with sensible defaults):
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `DEV_DIR` | `~/dev` | Root of your dev workspace |
+| `OBSIDIAN_DIR` | `~/dev/content/obsidian` | Obsidian vault for L2b/L3 |
+| `QUALITY_SCORE` | auto-detected | Override context quality (0–100) |
+| `FORCE` | `0` | Set to `1` to skip quality gate |
+| `DRY_RUN` | `0` | Set to `1` to preview without acting |
+
+### 3. Install and run
+
+```bash
+npm install
+bash examples/w5-full-pipeline.sh "your task description" your-repo
+```
+
+### Individual layer commands
 
 ```bash
 # L1: Text search — find all references to a symbol
@@ -161,6 +189,9 @@ FORCE=1 bash examples/w5-full-pipeline.sh "hotfix" my-project
 context-and-impact/
 ├── SKILL.md                    # Master skill definition (Claude Code / OpenClaw)
 ├── CLAUDE.md                   # Claude Code project instructions
+├── .env.example                # Environment variable template (copy to .env)
+├── scripts/
+│   └── check-prerequisites.sh  # Verify all dependencies before first run
 ├── docs/
 │   └── architecture.md         # Detailed architecture diagrams
 ├── skills/

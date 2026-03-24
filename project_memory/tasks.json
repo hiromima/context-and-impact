@@ -1,15 +1,69 @@
 {
-  "generated_at": "2026-03-24T12:52:23.176485+00:00",
-  "query": "テスト",
-  "repo": "kotowari",
-  "quality_score": 70,
+  "generated_at": "2026-03-24T13:00:00.000000Z",
+  "query": "Multi-LLM Aggregator Integration Sprint",
+  "repo": "context-and-impact",
+  "quality_score": 88,
+  "sprint": "aggregator-v1",
   "tasks": [
     {
-      "id": "task-1",
-      "label": "Implement: テスト",
-      "agent": "kaede",
+      "id": "task-B",
+      "label": "feat: RRF Retrieval Aggregator — L1+L2b+L3 multi-layer fusion",
+      "file": "src/cli/rrf-merge.py",
+      "agent": "copilot",
+      "issue": 23,
+      "pr": 24,
       "depends_on": [],
-      "status": "pending"
+      "status": "completed",
+      "tier": "copilot",
+      "priority": 1
+    },
+    {
+      "id": "task-A",
+      "label": "feat: Temporal Memory Scorer — time-decay for ARIA worklog",
+      "file": "src/cli/temporal-score.py",
+      "agent": "copilot",
+      "issue": 25,
+      "pr": 26,
+      "depends_on": [],
+      "status": "completed",
+      "tier": "copilot",
+      "priority": 1
+    },
+    {
+      "id": "task-C",
+      "label": "feat: Ensemble Quality Gate — 3-judge parallel LLM scoring",
+      "file": "src/quality/ensemble-judge.py",
+      "agent": "copilot",
+      "issue": 27,
+      "pr": 28,
+      "depends_on": [],
+      "status": "completed",
+      "tier": "copilot",
+      "priority": 1
+    },
+    {
+      "id": "task-D",
+      "label": "feat: Multi-model Task Classifier — 3-model majority vote routing",
+      "file": "src/routing/multi-classifier.py",
+      "agent": "copilot",
+      "issue": 29,
+      "pr": 30,
+      "depends_on": [],
+      "status": "completed",
+      "tier": "copilot",
+      "priority": 2
+    },
+    {
+      "id": "task-E",
+      "label": "feat: Integration — wire all 4 modules into w5-full-pipeline.sh",
+      "file": "examples/w5-full-pipeline.sh",
+      "agent": "copilot",
+      "issue": 31,
+      "pr": 32,
+      "depends_on": ["task-B", "task-A", "task-C", "task-D"],
+      "status": "completed",
+      "tier": "copilot",
+      "priority": 3
     }
   ]
 }
