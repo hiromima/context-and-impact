@@ -66,6 +66,31 @@ echo ""
 echo "━━━ Phase A: コンテキスト収集 ━━━"
 echo ""
 
+# Phase A-0: L0 Temporal Memory (worklog.md)
+echo "▶ A-0: L0 Temporal Memory (worklog.md)"
+WORKLOG_PATH="${ROOT_DIR}/project_memory/worklog.md"
+if [ -f "${ROOT_DIR}/src/cli/temporal-score.py" ] && [ -f "$WORKLOG_PATH" ]; then
+  TEMPORAL_OUT=$(python3 "${ROOT_DIR}/src/cli/temporal-score.py" \
+    --worklog "$WORKLOG_PATH" \
+    --query "${QUERY}" \
+    --limit 5 2>/dev/null || echo "[]")
+  echo "$TEMPORAL_OUT" | python3 -c "
+import json, sys
+try:
+    entries = json.load(sys.stdin)
+    if entries:
+        for e in entries[:3]:
+            print(f'  [{e[\"temporal_score\"]:.2f}] {e[\"entry\"]}: {e[\"title\"][:50]}')
+    else:
+        print('  (関連エントリなし)')
+except Exception:
+    print('  (temporal-score 読み込みエラー)')
+" 2>/dev/null || echo "  (temporal-score.py エラー)"
+else
+  echo "  (temporal-score.py スキップ)"
+fi
+echo ""
+
 # L1〜L3 を全て並列実行
 echo "▶ L1/L2a/L2b/L3: 並列コンテキスト収集"
 KEYWORD=$(echo "$QUERY" | awk '{print $1}')  # 最初の単語で検索
@@ -77,7 +102,7 @@ TMP_L2B=$(mktemp)
 TMP_L3=$(mktemp)
 
 # 異常終了時も tmpfile を確実に削除
-trap 'rm -f "$TMP_L1C" "$TMP_L1O" "$TMP_L2A" "$TMP_L2B" "$TMP_L3"' EXIT
+trap 'rm -f "$TMP_L1C" "$TMP_L1O" "$TMP_L2A" "$TMP_L2B" "$TMP_L3" /tmp/ctx-l1.json /tmp/ctx-l2b.json /tmp/ctx-l3.json /tmp/ctx-rrf.json' EXIT
 
 # L1: テキスト検索（dist/node_modules 除外で高速化）
 grep -r "$KEYWORD" "$DEV_DIR/products/$REPO" \
@@ -157,7 +182,34 @@ echo "▶ L3: セマンティック検索"
 cat "$TMP_L3"
 echo ""
 
+# Phase A-5 準備: L1/L2b/L3 結果を JSON 配列として保存（RRF 入力用）
+python3 -c "
+import json
+def to_json(path, out):
+    try:
+        lines = open(path).read().strip().splitlines()
+        docs = [l.strip() for l in lines if l.strip() and not l.strip().startswith(('  ⚠', '  ❌', '('))]
+        json.dump(docs, open(out, 'w'))
+    except Exception:
+        json.dump([], open(out, 'w'))
+import os
+to_json(os.environ['TMP_L1C'], '/tmp/ctx-l1.json')
+to_json(os.environ['TMP_L2B'], '/tmp/ctx-l2b.json')
+to_json(os.environ['TMP_L3'],  '/tmp/ctx-l3.json')
+" TMP_L1C="$TMP_L1C" TMP_L2B="$TMP_L2B" TMP_L3="$TMP_L3" 2>/dev/null || true
+
 rm -f "$TMP_L1C" "$TMP_L1O" "$TMP_L2A" "$TMP_L2B" "$TMP_L3"
+
+# Phase A-5: RRF統合
+echo "▶ A-5: RRF Retrieval Aggregation"
+python3 "${ROOT_DIR}/src/cli/rrf-merge.py" \
+  --l1  /tmp/ctx-l1.json  \
+  --l2b /tmp/ctx-l2b.json \
+  --l3  /tmp/ctx-l3.json  \
+  --limit 20 > /tmp/ctx-rrf.json 2>/dev/null \
+  && echo "  RRF merged: $(python3 -c "import json; print(len(json.load(open('/tmp/ctx-rrf.json'))))" 2>/dev/null) docs" \
+  || echo "  (RRF skipped — modules not ready)"
+echo ""
 
 # ─────────────────────────────────────
 # Phase B: コンテキスト品質ゲート
@@ -166,8 +218,8 @@ echo "━━━ Phase B: コンテキスト品質ゲート ━━━"
 echo ""
 
 # スコア計算
-CODE_COUNT=$(echo "$CODE_HITS" | grep -c . 2>/dev/null || echo 0)
-OBS_COUNT=$(echo "$OBS_HITS"  | grep -c . 2>/dev/null || echo 0)
+CODE_COUNT=$(echo "$CODE_HITS" | grep -c . 2>/dev/null) || CODE_COUNT=0
+OBS_COUNT=$(echo "$OBS_HITS"  | grep -c . 2>/dev/null) || OBS_COUNT=0
 GNI_OK=0; command -v gitnexus &>/dev/null && GNI_OK=1
 
 QUALITY_SCORE=${QUALITY_SCORE:-0}
@@ -185,6 +237,23 @@ if [ "$QUALITY_SCORE" -eq 0 ]; then
   [ "$GNI_OK"     -eq 1 ] && SCORE=$((SCORE + 25))
   [ "$GNI_OK"     -eq 1 ] && SCORE=$((SCORE + 15))
   QUALITY_SCORE=$SCORE
+fi
+
+# Phase B-0: Ensemble Quality Gate
+if command -v python3 &>/dev/null && [ -f "${ROOT_DIR}/src/quality/ensemble-judge.py" ]; then
+  ENSEMBLE_OUT=$(python3 "${ROOT_DIR}/src/quality/ensemble-judge.py" \
+    --task "${QUERY}" \
+    --context "$(cat /tmp/ctx-rrf.json 2>/dev/null || echo '{}')" \
+    --model "claude-haiku-4-5-20251001" 2>/dev/null)
+  if [ -n "$ENSEMBLE_OUT" ]; then
+    QUALITY_SCORE=$(echo "$ENSEMBLE_OUT" | python3 -c \
+      "import json,sys; print(int(json.load(sys.stdin)['ensemble_score']))" \
+      2>/dev/null || echo "${QUALITY_SCORE:-75}")
+    CONSENSUS=$(echo "$ENSEMBLE_OUT" | python3 -c \
+      "import json,sys; print(json.load(sys.stdin).get('consensus','true'))" \
+      2>/dev/null || echo "true")
+    echo "  Ensemble score: ${QUALITY_SCORE} (consensus: ${CONSENSUS})"
+  fi
 fi
 
 echo "  スコア内訳:"
@@ -385,9 +454,30 @@ FIX_KW  = ["fix", "修正", "バグ", "警告", "deprecated", "utcnow", "warning
 FEAT_KW = ["feat", "add", "追加", "docs", "test", "chore", "implement", "refactor", "review"]
 MAN_AG  = ["kaede", "dev-coder", "kotowari-dev", "cc-agent-1"]
 
+# Resolve multi-classifier path relative to tasks_path
+_root = os.path.dirname(os.path.dirname(os.path.abspath(tasks_path))) if tasks_path else ""
+CLASSIFIER = os.path.join(_root, "src", "routing", "multi-classifier.py")
+
 def route(task):
     label = task.get("label", "").lower()
     agent = task.get("agent", "")
+    # Try multi-classifier first (falls back to keyword rules internally)
+    if os.path.isfile(CLASSIFIER):
+        try:
+            r = subprocess.run(
+                [sys.executable, CLASSIFIER, "--task", label],
+                capture_output=True, text=True, timeout=20
+            )
+            if r.returncode == 0 and r.stdout.strip():
+                result = json.loads(r.stdout)
+                rt = result.get("route", "")
+                if rt in ("cursor-agent", "copilot", "manual"):
+                    if rt == "manual" and agent in MAN_AG:
+                        return "auto-pipeline"
+                    return rt
+        except Exception:
+            pass
+    # Keyword-based fallback
     if any(k in label for k in FIX_KW):
         return "cursor-agent"
     if any(k in label for k in FEAT_KW):
@@ -539,7 +629,7 @@ COPILOT_PRS=$(gh pr list \
   --author @copilot \
   --draft \
   --json number,title,createdAt \
-  --limit 5 2>/dev/null)
+  --limit 5 2>/dev/null) || COPILOT_PRS=""
 
 if [ -n "$COPILOT_PRS" ] && [ "$COPILOT_PRS" != "[]" ]; then
     echo "  レビュー待ち Draft PR:"
