@@ -9,6 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 DEV_DIR="${DEV_DIR:-$HOME/dev}"
 OBSIDIAN_DIR="${OBSIDIAN_DIR:-$HOME/dev/content/obsidian}"
+DRY_RUN="${DRY_RUN:-0}"   # 1 にするとルーティング確認のみ（実際には起動しない）
 
 echo "==================================================================="
 echo "  W5: context-and-impact 完全パイプライン"
@@ -65,52 +66,98 @@ echo ""
 echo "━━━ Phase A: コンテキスト収集 ━━━"
 echo ""
 
-# L1: テキスト検索
-echo "▶ L1: テキスト検索"
+# L1〜L3 を全て並列実行
+echo "▶ L1/L2a/L2b/L3: 並列コンテキスト収集"
 KEYWORD=$(echo "$QUERY" | awk '{print $1}')  # 最初の単語で検索
-CODE_HITS=$(grep -r "$KEYWORD" "$DEV_DIR/products/$REPO" \
-  --include="*.ts" --include="*.js" --include="*.py" \
-  -l 2>/dev/null | head -5) || true
-OBS_HITS=$(grep -r "$KEYWORD" "$OBSIDIAN_DIR" \
-  --include="*.md" -l 2>/dev/null | head -5) || true
 
+TMP_L1C=$(mktemp)  # L1 コード
+TMP_L1O=$(mktemp)  # L1 Obsidian
+TMP_L2A=$(mktemp)
+TMP_L2B=$(mktemp)
+TMP_L3=$(mktemp)
+
+# 異常終了時も tmpfile を確実に削除
+trap 'rm -f "$TMP_L1C" "$TMP_L1O" "$TMP_L2A" "$TMP_L2B" "$TMP_L3"' EXIT
+
+# L1: テキスト検索（dist/node_modules 除外で高速化）
+grep -r "$KEYWORD" "$DEV_DIR/products/$REPO" \
+  --include="*.ts" --include="*.js" --include="*.py" \
+  --exclude-dir=dist --exclude-dir=node_modules --exclude-dir=.git \
+  -l 2>/dev/null | head -5 > "$TMP_L1C" &
+PID_L1C=$!
+
+grep -r "$KEYWORD" "$OBSIDIAN_DIR" \
+  --include="*.md" \
+  --exclude-dir=.git --exclude-dir=.trash \
+  -l 2>/dev/null | head -5 > "$TMP_L1O" &
+PID_L1O=$!
+
+# L2a: GitNexus コード影響分析（バックグラウンド）
+if command -v gitnexus &>/dev/null; then
+  (gitnexus impact "$KEYWORD" --repo "$REPO" 2>/dev/null | head -20 \
+    || echo "  ⚠️  インデックス未生成 → gitnexus analyze --path ~/dev/products/$REPO/") > "$TMP_L2A" &
+  PID_L2A=$!
+else
+  echo "  ❌ gitnexus 未インストール" > "$TMP_L2A"
+  PID_L2A=""
+fi
+
+# L2b: Obsidian wikilink グラフ（バックグラウンド）
+if command -v gitnexus &>/dev/null; then
+  (gitnexus cypher --repo obsidian "
+  MATCH (f:File) WHERE f.name CONTAINS '$(echo "$QUERY" | awk '{print $1}')'
+    OR f.filePath CONTAINS '$(echo "$QUERY" | awk '{print $1}')'
+  RETURN f.name, f.filePath LIMIT 5
+  " 2>/dev/null | head -10 || echo "  ⚠️  Obsidian インデックス未生成") > "$TMP_L2B" &
+  PID_L2B=$!
+else
+  echo "(gitnexus なし)" > "$TMP_L2B"
+  PID_L2B=""
+fi
+
+# L3: セマンティック検索（バックグラウンド）
+if [ -f "$ROOT_DIR/src/cli/semantic-search.py" ]; then
+  (python3 "$ROOT_DIR/src/cli/semantic-search.py" \
+    --query "$QUERY" --limit 5 2>/dev/null \
+    || echo "  ⚠️  SmartConnections インデックス未生成") > "$TMP_L3" &
+  PID_L3=$!
+else
+  echo "  ❌ semantic-search.py が見つかりません" > "$TMP_L3"
+  PID_L3=""
+fi
+
+# 全並列処理を待機
+[ -n "${PID_L1C:-}" ] && wait "$PID_L1C" 2>/dev/null || true
+[ -n "${PID_L1O:-}" ] && wait "$PID_L1O" 2>/dev/null || true
+[ -n "${PID_L2A:-}" ] && wait "$PID_L2A" 2>/dev/null || true
+[ -n "${PID_L2B:-}" ] && wait "$PID_L2B" 2>/dev/null || true
+[ -n "${PID_L3:-}"  ] && wait "$PID_L3"  2>/dev/null || true
+
+# L1 結果をシェル変数に読み込む（Phase B のスコア計算に使用）
+CODE_HITS=$(cat "$TMP_L1C")
+OBS_HITS=$(cat "$TMP_L1O")
+
+# 結果表示
+echo "▶ L1: テキスト検索"
 echo "  コードファイル:"
 [ -n "$CODE_HITS" ] && echo "$CODE_HITS" | sed 's/^/    /' || echo "    (ヒットなし)"
 echo "  Obsidian ノート:"
 [ -n "$OBS_HITS" ] && echo "$OBS_HITS" | sed 's/^/    /' || echo "    (ヒットなし)"
 echo ""
 
-# L2a: GitNexus コード影響分析
 echo "▶ L2a: GitNexus コード影響分析"
-if command -v gitnexus &>/dev/null; then
-  gitnexus impact "$KEYWORD" --repo "$REPO" 2>/dev/null | head -20 || \
-    echo "  ⚠️  インデックス未生成 → gitnexus analyze --path ~/dev/products/$REPO/"
-else
-  echo "  ❌ gitnexus 未インストール"
-fi
+cat "$TMP_L2A"
 echo ""
 
-# L2b: Obsidian wikilink グラフ
 echo "▶ L2b: Obsidian wikilink グラフ"
-if command -v gitnexus &>/dev/null; then
-  gitnexus cypher --repo obsidian "
-  MATCH (f:File) WHERE f.name CONTAINS '$(echo "$QUERY" | awk '{print $1}')'
-    OR f.filePath CONTAINS '$(echo "$QUERY" | awk '{print $1}')'
-  RETURN f.name, f.filePath LIMIT 5
-  " 2>/dev/null | head -10 || echo "  ⚠️  Obsidian インデックス未生成"
-fi
+cat "$TMP_L2B"
 echo ""
 
-# L3: セマンティック検索
 echo "▶ L3: セマンティック検索"
-if [ -f "$ROOT_DIR/src/cli/semantic-search.py" ]; then
-  python3 "$ROOT_DIR/src/cli/semantic-search.py" \
-    --query "$QUERY" --limit 5 2>/dev/null || \
-    echo "  ⚠️  SmartConnections インデックス未生成（Obsidianプラグインで初期化してください）"
-else
-  echo "  ❌ semantic-search.py が見つかりません"
-fi
+cat "$TMP_L3"
 echo ""
+
+rm -f "$TMP_L1C" "$TMP_L1O" "$TMP_L2A" "$TMP_L2B" "$TMP_L3"
 
 # ─────────────────────────────────────
 # Phase B: コンテキスト品質ゲート
@@ -252,14 +299,15 @@ PYEOF
 
 echo ""
 
-# Agent Skill Bus に実行記録
-echo "▶ Agent Skill Bus 実行記録"
+# Agent Skill Bus に実行記録（バックグラウンド — パイプラインをブロックしない）
+echo "▶ Agent Skill Bus 実行記録 (bg)"
 if command -v npx &>/dev/null; then
   npx agent-skill-bus record-run \
     --skill context-and-impact \
     --result success \
     --metrics "{\"query\": \"${QUERY}\", \"repo\": \"${REPO}\", \"quality_score\": ${QUALITY_SCORE}, \"dag\": \"${TASKS_JSON}\"}" \
-    2>/dev/null && echo "  ✅ 記録完了" || echo "  ⚠️  記録スキップ"
+    2>/dev/null &
+  echo "  ✅ 記録開始 (バックグラウンド)"
 fi
 echo ""
 
@@ -302,6 +350,129 @@ echo "▶ 改善フラグ確認"
 if command -v npx &>/dev/null; then
   npx agent-skill-bus flagged 2>/dev/null | head -5 || true
 fi
+echo ""
+
+# ─────────────────────────────────────
+# Phase D-2: Execution Router
+# tasks.json のタスクをキーワード/agent で自動振り分け:
+#   fix/修正/警告系  → cursor-agent   (ローカル, ~8秒)
+#   feat/docs/test系 → @copilot Issue (クラウド, ~2分)
+#   kaede/dev-coder  → [auto] Pipeline (webhook-gate)
+#   それ以外         → 表示のみ (手動)
+# DRY_RUN=1 で起動せずルーティング確認のみ
+# ─────────────────────────────────────
+echo "▶ D-2: Execution Router — 自動起動 (DRY_RUN=${DRY_RUN})"
+python3 - <<'ROUTEREOF'
+import json, subprocess, os, sys
+
+tasks_path = os.environ.get("TASKS_JSON", "")
+repo       = os.environ.get("REPO", "context-and-impact")
+query      = os.environ.get("QUERY", "")
+dry_run    = os.environ.get("DRY_RUN", "0") == "1"
+
+try:
+    dag   = json.load(open(tasks_path))
+    tasks = dag.get("tasks", [])
+except Exception as e:
+    print(f"  (tasks.json なし, スキップ: {e})")
+    sys.exit(0)
+
+if not tasks:
+    print("  (タスク 0 件, スキップ)")
+    sys.exit(0)
+
+FIX_KW  = ["fix", "修正", "バグ", "警告", "deprecated", "utcnow", "warning", "error", "bug"]
+FEAT_KW = ["feat", "add", "追加", "docs", "test", "chore", "implement", "refactor", "review"]
+MAN_AG  = ["kaede", "dev-coder", "kotowari-dev", "cc-agent-1"]
+
+def route(task):
+    label = task.get("label", "").lower()
+    agent = task.get("agent", "")
+    if any(k in label for k in FIX_KW):
+        return "cursor-agent"
+    if any(k in label for k in FEAT_KW):
+        return "copilot"
+    if agent in MAN_AG:
+        return "auto-pipeline"
+    return "manual"
+
+tiers = {"cursor-agent": [], "copilot": [], "auto-pipeline": [], "manual": []}
+for task in tasks:
+    t = route(task)
+    tiers[t].append(task)
+    flag = "(dry)" if dry_run else ""
+    print(f"  [{t:14s}] {task.get('id','?')}: {task.get('label','')[:55]} {flag}")
+
+print("")
+
+if dry_run:
+    print("  DRY_RUN=1: 実際には起動しません")
+    sys.exit(0)
+
+# cursor-agent: ローカル即時実行
+import shutil
+for task in tiers["cursor-agent"]:
+    label = task.get("label", "")
+    print(f"  cursor-agent 起動: {label[:45]}")
+    if shutil.which("cursor-agent") is None:
+        print("  ⚠️  cursor-agent 未インストール (スキップ): npm install -g @cursor/agent")
+        continue
+    try:
+        r = subprocess.run(
+            ["cursor-agent", "--print", "--trust"],
+            input=label,
+            capture_output=True, text=True, timeout=90
+        )
+        out = (r.stdout + r.stderr).strip()
+        print(f"    => {out[:100]}" if out else "    => 完了")
+    except subprocess.TimeoutExpired:
+        print("    => タイムアウト（90秒）スキップ")
+    except Exception as e:
+        print(f"    => エラー: {e}")
+
+# Copilot Coding Agent: クラウド非同期
+for task in tiers["copilot"]:
+    label = task.get("label", "")
+    body  = (f"## コンテキスト\nクエリ: {query}\n\n"
+             f"## タスク\n{label}\n\n"
+             f"## 完了条件\n- [ ] テストが通る\n- [ ] 既存動作に影響なし")
+    title = f"[copilot] {label[:60]}"
+    try:
+        r = subprocess.run(
+            ["gh", "issue", "create",
+             "--repo", f"ShunsukeHayashi/{repo}",
+             "--title", title,
+             "--assignee", "@copilot",
+             "--body", body],
+            capture_output=True, text=True, timeout=30
+        )
+        url = r.stdout.strip()
+        print(f"  @copilot Issue: {url[:80]}" if url else f"  @copilot Issue 作成試行: {label[:45]}")
+    except subprocess.TimeoutExpired:
+        print(f"  @copilot Issue タイムアウト: {label[:45]}")
+    except Exception as e:
+        print(f"  @copilot Issue エラー: {e}")
+
+# [auto] Pipeline: webhook-gate 経由
+for task in tiers["auto-pipeline"]:
+    label = task.get("label", "")
+    title = f"[auto] {label[:60]}"
+    try:
+        r = subprocess.run(
+            ["gh", "issue", "create",
+             "--repo", f"ShunsukeHayashi/{repo}",
+             "--title", title,
+             "--label", "auto",
+             "--body", f"自動生成\n{label}"],
+            capture_output=True, text=True, timeout=30
+        )
+        url = r.stdout.strip()
+        print(f"  [auto] Issue: {url[:80]}" if url else f"  [auto] Issue 作成試行: {label[:45]}")
+    except subprocess.TimeoutExpired:
+        print(f"  [auto] Issue タイムアウト: {label[:45]}")
+    except Exception as e:
+        print(f"  [auto] Issue エラー: {e}")
+ROUTEREOF
 echo ""
 
 # ─────────────────────────────────────
@@ -356,7 +527,34 @@ if command -v npx &>/dev/null; then
     --skill context-and-impact \
     --result success \
     --metrics "{\"query\":\"${QUERY}\",\"repo\":\"${REPO}\",\"quality_score\":${QUALITY_SCORE},\"tasks\":${TASK_COUNT},\"self_score\":${SELF_SCORE}}" \
-    2>/dev/null && echo "  ✅ スコア記録完了 (self_score=${SELF_SCORE})" || echo "  ⚠️  記録スキップ"
+    2>/dev/null &
+  echo "  ✅ スコア記録開始 (self_score=${SELF_SCORE}, バックグラウンド)"
+fi
+echo ""
+
+# E4: Copilot Draft PR 確認
+echo "▶ E4: Copilot Draft PR 監視"
+COPILOT_PRS=$(gh pr list \
+  --repo "ShunsukeHayashi/${REPO}" \
+  --author @copilot \
+  --draft \
+  --json number,title,createdAt \
+  --limit 5 2>/dev/null)
+
+if [ -n "$COPILOT_PRS" ] && [ "$COPILOT_PRS" != "[]" ]; then
+    echo "  レビュー待ち Draft PR:"
+    echo "$COPILOT_PRS" | REPO_NAME="${REPO}" python3 -c "
+import json, sys, os
+repo = os.environ.get('REPO_NAME', '')
+for pr in json.load(sys.stdin):
+    print(f'  #{pr[\"number\"]}: {pr[\"title\"][:55]}')
+    print(f'    作成: {pr[\"createdAt\"]}')
+    print(f'    確認: gh pr view {pr[\"number\"]} --repo ShunsukeHayashi/{repo}')
+    "
+    echo "" >> "$WORKLOG"
+    echo "- **pending_copilot_prs**: $(echo "$COPILOT_PRS" | python3 -c 'import json,sys; print([p["number"] for p in json.load(sys.stdin)])' 2>/dev/null)" >> "$WORKLOG"
+else
+    echo "  待機中の Copilot Draft PR なし"
 fi
 echo ""
 
@@ -369,10 +567,13 @@ echo "  Pre-A: GNI 鮮度確認"
 echo "  A    : L1/L2a/L2b/L3 コンテキスト収集"
 echo "  B    : quality_score=${QUALITY_SCORE}/100"
 echo "  C    : tasks.json (${TASK_COUNT} タスク) → ${TASKS_JSON}"
-echo "  D    : ai-triad 実行プラン生成"
-echo "  E    : worklog.md 記録 + cycle-ops + self-improve"
+echo "  D-1  : ai-triad 実行プラン表示"
+echo "  D-2  : Execution Router (cursor-agent / @copilot / [auto] 自動振り分け)"
+echo "  E    : worklog.md 記録 + cycle-ops + self-improve + Copilot PR 監視"
 echo ""
 echo "次のアクション:"
-echo "  1. ${TASKS_JSON} のタスクをエージェントに割り当てて実行"
+echo "  1. ${TASKS_JSON} のタスクは D-2 Execution Router が自動起動済み"
 echo "  2. 実行後: worklog.md に result を追記"
 echo "  3. 品質確認: bash examples/w4-quality-check.sh"
+echo "  4. Copilot Draft PR レビュー: gh pr list --repo ShunsukeHayashi/${REPO} --author @copilot"
+echo "  5. DRY_RUN モード: DRY_RUN=1 bash examples/w5-full-pipeline.sh \"クエリ\" ${REPO}"
