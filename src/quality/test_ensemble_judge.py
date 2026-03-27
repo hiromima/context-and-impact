@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 # src/quality を Python パスに追加
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from quality.ensemble_judge import judge_ensemble, _stddev, DUMMY_SCORE, STDDEV_THRESHOLD, CMP_ENABLED_ENV  # noqa: E402
+from quality.ensemble_judge import judge_ensemble, _stddev, DUMMY_SCORE, STDDEV_THRESHOLD  # noqa: E402
 
 
 class TestStddev(unittest.TestCase):
@@ -31,17 +31,16 @@ class TestStddev(unittest.TestCase):
 class TestFallbackWithoutApiKey(unittest.TestCase):
     def test_returns_dummy_score(self):
         with patch.dict(os.environ, {}, clear=True):
-            os.environ.pop("GOOGLE_API_KEY", None)
+            os.environ.pop("ANTHROPIC_API_KEY", None)
             result = judge_ensemble(task="テスト", context="コンテキスト")
         self.assertEqual(result["ensemble_score"], float(DUMMY_SCORE))
         self.assertEqual(result["scores"], [float(DUMMY_SCORE)] * 3)
         self.assertTrue(result["consensus"])
         self.assertEqual(result["recommendation"], "proceed")
-        self.assertIsNone(result["cmp"])
 
     def test_json_serialisable(self):
         with patch.dict(os.environ, {}, clear=True):
-            os.environ.pop("GOOGLE_API_KEY", None)
+            os.environ.pop("ANTHROPIC_API_KEY", None)
             result = judge_ensemble(task="テスト", context="コンテキスト")
         serialised = json.dumps(result)
         parsed = json.loads(serialised)
@@ -56,13 +55,13 @@ class TestEnsembleWithMockApi(unittest.TestCase):
 
     def test_consensus_when_stddev_low(self):
         """3スコアの標準偏差が20以下 → consensus=True, recommendation=proceed"""
-        os.environ["GOOGLE_API_KEY"] = "test-key"
+        os.environ["ANTHROPIC_API_KEY"] = "test-key"
         try:
             with patch("quality.ensemble_judge._call_judge") as mock_judge:
                 mock_judge.side_effect = [78.0, 75.0, 80.0]
                 result = judge_ensemble(task="テスト", context="コンテキスト")
         finally:
-            del os.environ["GOOGLE_API_KEY"]
+            del os.environ["ANTHROPIC_API_KEY"]
 
         self.assertAlmostEqual(result["ensemble_score"], round((78 + 75 + 80) / 3, 1))
         self.assertLessEqual(result["stddev"], STDDEV_THRESHOLD)
@@ -71,14 +70,14 @@ class TestEnsembleWithMockApi(unittest.TestCase):
 
     def test_collect_more_when_stddev_high(self):
         """3スコアの標準偏差が20超 → consensus=False, recommendation=collect_more"""
-        os.environ["GOOGLE_API_KEY"] = "test-key"
+        os.environ["ANTHROPIC_API_KEY"] = "test-key"
         try:
             with patch("quality.ensemble_judge._call_judge") as mock_judge:
                 # [10, 60, 95] → stddev ≈ 35 > 20
                 mock_judge.side_effect = [10.0, 60.0, 95.0]
                 result = judge_ensemble(task="テスト", context="コンテキスト")
         finally:
-            del os.environ["GOOGLE_API_KEY"]
+            del os.environ["ANTHROPIC_API_KEY"]
 
         self.assertGreater(result["stddev"], STDDEV_THRESHOLD)
         self.assertFalse(result["consensus"])
@@ -86,134 +85,28 @@ class TestEnsembleWithMockApi(unittest.TestCase):
 
     def test_scores_list_has_three_elements(self):
         """scores リストは必ず 3 要素"""
-        os.environ["GOOGLE_API_KEY"] = "test-key"
+        os.environ["ANTHROPIC_API_KEY"] = "test-key"
         try:
             with patch("quality.ensemble_judge._call_judge") as mock_judge:
                 mock_judge.side_effect = [80.0, 70.0, 60.0]
                 result = judge_ensemble(task="テスト", context="コンテキスト")
         finally:
-            del os.environ["GOOGLE_API_KEY"]
+            del os.environ["ANTHROPIC_API_KEY"]
 
         self.assertEqual(len(result["scores"]), 3)
 
     def test_judge_exception_uses_dummy_score(self):
         """判定官が例外を送出した場合はダミースコアで代替"""
-        os.environ["GOOGLE_API_KEY"] = "test-key"
+        os.environ["ANTHROPIC_API_KEY"] = "test-key"
         try:
             with patch("quality.ensemble_judge._call_judge") as mock_judge:
                 mock_judge.side_effect = [80.0, RuntimeError("API error"), 90.0]
                 result = judge_ensemble(task="テスト", context="コンテキスト")
         finally:
-            del os.environ["GOOGLE_API_KEY"]
+            del os.environ["ANTHROPIC_API_KEY"]
 
         self.assertEqual(len(result["scores"]), 3)
         self.assertIn(float(DUMMY_SCORE), result["scores"])
-
-
-class TestEnsembleWithCMP(unittest.TestCase):
-    """CMP統合テスト: ENSEMBLE_CMP_ENABLED=1 でCMPシグナルが付与される"""
-
-    def test_cmp_disabled_by_default(self):
-        """CMP_ENABLED未設定 → cmp=None"""
-        os.environ["GOOGLE_API_KEY"] = "test-key"
-        try:
-            with patch("quality.ensemble_judge._call_judge") as mock_judge:
-                mock_judge.side_effect = [80.0, 75.0, 78.0]
-                result = judge_ensemble(
-                    task="テスト", context="コンテキスト",
-                    generated_output="生成出力",
-                )
-        finally:
-            del os.environ["GOOGLE_API_KEY"]
-        self.assertIsNone(result["cmp"])
-
-    def test_cmp_enabled_with_output(self):
-        """CMP有効 + generated_output あり → cmpが返る"""
-        os.environ["GOOGLE_API_KEY"] = "test-key"
-        os.environ[CMP_ENABLED_ENV] = "1"
-        try:
-            with patch("quality.ensemble_judge._call_judge") as mock_judge, \
-                 patch("quality.cross_model_disagreement._call_api") as mock_cmp:
-                mock_judge.side_effect = [80.0, 75.0, 78.0]
-                mock_cmp.side_effect = [
-                    "20\n問題なし",  # CMP
-                    "15\n明確",     # CME
-                ]
-                result = judge_ensemble(
-                    task="テスト", context="コンテキスト",
-                    generated_output="生成出力",
-                )
-        finally:
-            del os.environ["GOOGLE_API_KEY"]
-            del os.environ[CMP_ENABLED_ENV]
-        self.assertIsNotNone(result["cmp"])
-        self.assertEqual(result["cmp"]["confident_error_risk"], "low")
-        self.assertEqual(result["recommendation"], "proceed")
-
-    def test_cmp_high_overrides_recommendation(self):
-        """consensus=True でも CMP高リスク → review_required"""
-        os.environ["GOOGLE_API_KEY"] = "test-key"
-        os.environ[CMP_ENABLED_ENV] = "1"
-        try:
-            with patch("quality.ensemble_judge._call_judge") as mock_judge, \
-                 patch("quality.cross_model_disagreement._call_api") as mock_cmp:
-                # 3判定官は高スコアで一致 (consensus=True)
-                mock_judge.side_effect = [85.0, 82.0, 88.0]
-                # しかしCMPは高驚き + CME低 → confident error
-                mock_cmp.side_effect = [
-                    "80\n矛盾する記述",  # CMP: high
-                    "15\nタスクは明確",   # CME: low
-                ]
-                result = judge_ensemble(
-                    task="テスト", context="コンテキスト",
-                    generated_output="間違った出力",
-                )
-        finally:
-            del os.environ["GOOGLE_API_KEY"]
-            del os.environ[CMP_ENABLED_ENV]
-        self.assertIsNotNone(result["cmp"])
-        self.assertEqual(result["cmp"]["confident_error_risk"], "high")
-        self.assertEqual(result["recommendation"], "review_required")
-
-    def test_cmp_high_overrides_even_without_consensus(self):
-        """consensus=False + CMP高リスク → review_required（安全側）"""
-        os.environ["GOOGLE_API_KEY"] = "test-key"
-        os.environ[CMP_ENABLED_ENV] = "1"
-        try:
-            with patch("quality.ensemble_judge._call_judge") as mock_judge, \
-                 patch("quality.cross_model_disagreement._call_api") as mock_cmp:
-                # 判定官のスコアがばらつく (consensus=False, stddev > 20)
-                mock_judge.side_effect = [30.0, 60.0, 90.0]
-                # CMPも高リスク
-                mock_cmp.side_effect = [
-                    "80\n矛盾あり",    # CMP: high
-                    "20\nタスクは明確",  # CME: low
-                ]
-                result = judge_ensemble(
-                    task="テスト", context="コンテキスト",
-                    generated_output="出力",
-                )
-        finally:
-            del os.environ["GOOGLE_API_KEY"]
-            del os.environ[CMP_ENABLED_ENV]
-        self.assertFalse(result["consensus"])
-        self.assertEqual(result["cmp"]["confident_error_risk"], "high")
-        self.assertEqual(result["recommendation"], "review_required")
-
-    def test_cmp_without_output_skips(self):
-        """CMP有効だが generated_output なし → cmp=None"""
-        os.environ["GOOGLE_API_KEY"] = "test-key"
-        os.environ[CMP_ENABLED_ENV] = "1"
-        try:
-            with patch("quality.ensemble_judge._call_judge") as mock_judge:
-                mock_judge.side_effect = [80.0, 75.0, 78.0]
-                result = judge_ensemble(
-                    task="テスト", context="コンテキスト",
-                )
-        finally:
-            del os.environ["GOOGLE_API_KEY"]
-            del os.environ[CMP_ENABLED_ENV]
-        self.assertIsNone(result["cmp"])
 
 
 if __name__ == "__main__":
