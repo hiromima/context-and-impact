@@ -244,12 +244,13 @@ if command -v python3 &>/dev/null && [ -f "${ROOT_DIR}/src/quality/ensemble-judg
   ENSEMBLE_OUT=$(python3 "${ROOT_DIR}/src/quality/ensemble-judge.py" \
     --task "${QUERY}" \
     --context "$(cat /tmp/ctx-rrf.json 2>/dev/null || echo '{}')" \
-    --model "claude-haiku-4-5-20251001" 2>/dev/null)
+    --model "claude-haiku-4-5-20251001" 2>/dev/null) || true  # unavailable は exit 2。set -e で落とさず下で扱う
   ENSEMBLE_REC=$(echo "$ENSEMBLE_OUT" | python3 -c \
-    "import json,sys; print(json.load(sys.stdin).get('recommendation',''))" 2>/dev/null)
+    "import json,sys; print(json.load(sys.stdin).get('recommendation',''))" 2>/dev/null) || true
   if [ "$ENSEMBLE_REC" = "unavailable" ] || [ -z "$ENSEMBLE_REC" ]; then
-    # 判定できなかった時に既定値で埋めない。ヒューリスティックのスコアのまま進み、その旨を出す
-    echo "  Ensemble judge: 判定不可 (API key 未設定または判定官の失敗) — heuristic score のまま"
+    # 判定できなかった時に既定値で埋めない。ゲートを止める側に倒す (続けるなら FORCE=1)
+    echo "  Ensemble judge: 判定不可 (API key 未設定または判定官の失敗) — 品質ゲートを止める"
+    QUALITY_SCORE=0
   elif [ -n "$ENSEMBLE_OUT" ]; then
     QUALITY_SCORE=$(echo "$ENSEMBLE_OUT" | python3 -c \
       "import json,sys; print(int(json.load(sys.stdin)['ensemble_score']))" \
@@ -257,7 +258,11 @@ if command -v python3 &>/dev/null && [ -f "${ROOT_DIR}/src/quality/ensemble-judg
     CONSENSUS=$(echo "$ENSEMBLE_OUT" | python3 -c \
       "import json,sys; print(json.load(sys.stdin).get('consensus','true'))" \
       2>/dev/null || echo "true")
-    echo "  Ensemble score: ${QUALITY_SCORE} (consensus: ${CONSENSUS})"
+    echo "  Ensemble score: ${QUALITY_SCORE} (consensus: ${CONSENSUS}, recommendation: ${ENSEMBLE_REC})"
+    # proceed 以外 (collect_more / block) はスコアが 70 以上でも通さない
+    if [ "$ENSEMBLE_REC" != "proceed" ] && [ "$QUALITY_SCORE" -ge 70 ]; then
+      QUALITY_SCORE=69
+    fi
   fi
 fi
 

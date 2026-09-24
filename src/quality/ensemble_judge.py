@@ -132,9 +132,11 @@ def judge_ensemble(
         return _unavailable(f"判定官が失敗: {detail}", scores, [i + 1 for i in sorted(errors)])
 
     stddev = _stddev(scores)
-    ensemble_score = round(sum(scores) / len(scores), 1)
+    mean = sum(scores) / len(scores)
+    ensemble_score = round(mean, 1)
     consensus = stddev <= STDDEV_THRESHOLD
-    if ensemble_score < PASS_THRESHOLD:
+    # 丸める前の平均で判定する ([69.9, 70, 70] は 70.0 に丸まるが 70 未満)
+    if mean < PASS_THRESHOLD:
         recommendation = "block"
     elif not consensus:
         recommendation = "collect_more"

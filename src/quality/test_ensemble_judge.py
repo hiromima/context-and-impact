@@ -116,6 +116,12 @@ class TestEnsembleWithMockApi(unittest.TestCase):
         self.assertLess(result["ensemble_score"], 70)
         self.assertEqual(result["recommendation"], "block")
 
+    def test_block_uses_unrounded_mean(self):
+        """[69.9, 70, 70] は表示上 70.0 だが、平均は 70 未満なので block"""
+        result = self._run([69.9, 70.0, 70.0])
+        self.assertEqual(result["ensemble_score"], 70.0)
+        self.assertEqual(result["recommendation"], "block")
+
     def test_block_wins_over_collect_more(self):
         """平均 70 未満かつ割れている → block"""
         result = self._run([10.0, 40.0, 95.0])
