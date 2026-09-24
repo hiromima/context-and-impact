@@ -7,7 +7,7 @@
 [![GitHub Issues](https://img.shields.io/github/issues/ShunsukeHayashi/context-and-impact)](https://github.com/ShunsukeHayashi/context-and-impact/issues)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-3.2.0-brightgreen)](https://github.com/ShunsukeHayashi/context-and-impact/releases)
-[![Tests](https://img.shields.io/badge/tests-64%20passed-brightgreen)](#testing)
+[![Tests](https://img.shields.io/badge/tests-71%20passed-brightgreen)](#testing)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D24.0.0-green)](https://nodejs.org/)
 [![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-Skill-purple)](SKILL.md)
 
@@ -50,7 +50,7 @@ Most AI pipelines start with a prompt. This one starts with **understanding**.
 | Shallow search | LLM guesses from training data | Semantic + graph search over your actual codebase |
 | Stale context | Old decisions outweigh recent ones | Temporal decay scores older entries lower (49.7% at 7 days) |
 | Single-source ranking | L1 noise drowns out real hits | RRF fuses L1+L2b+L3 scores — `1/(k+rank)`, k=60 |
-| Subjective quality gates | One LLM judge has high variance | 3-judge ensemble; stddev > 20 → collect_more |
+| Subjective quality gates | One LLM judge has high variance | 3-judge ensemble; mean < 70 → block, stddev > 20 → collect_more, no API key / judge failure → unavailable (exit 2) |
 | Wrong agent for the task | Every task goes to one agent | 3-model majority vote routes fix→cursor / feat→copilot |
 | Cascading failures | One wrong change triggers chain of errors | Dependency DAG computed before any execution |
 | No feedback loop | Same mistakes repeated | ARIA audit records every run; skills self-improve |
@@ -165,7 +165,7 @@ FORCE=1 bash examples/w5-full-pipeline.sh "hotfix" my-project
 |-------|-----------|--------|
 | **A-0** | Temporal Memory Decay — `exp(-0.1 × days)` scoring of `worklog.md` entries | `src/cli/temporal-score.py` |
 | **A-5** | RRF Fusion — fuse L1+L2b+L3 results via `1/(k+rank)`, k=60 | `src/cli/rrf-merge.py` |
-| **B-0** | Ensemble Quality Gate — 3 parallel LLM judges, stddev>20 → `collect_more` | `src/quality/ensemble_judge.py` |
+| **B-0** | Ensemble Quality Gate — 3 parallel LLM judges, mean<70 → `block`, stddev>20 → `collect_more`, judge failure → `unavailable` | `src/quality/ensemble_judge.py` |
 | **D-2** | Multi-model Task Classifier — 3-model majority vote routing | `src/routing/multi_classifier.py` |
 | **All** | 64 unit tests (13 RRF + 19 Temporal + 8 Ensemble + 24 Classifier) | `src/*/test_*.py` |
 
@@ -249,7 +249,7 @@ context-and-impact/
 │   ├── quality/
 │   │   ├── ensemble_judge.py       # B-0: Ensemble Quality Gate (importable)
 │   │   ├── ensemble-judge.py       # B-0: CLI shim
-│   │   └── test_ensemble_judge.py  # 8 unit tests
+│   │   └── test_ensemble_judge.py  # 16 unit tests
 │   ├── routing/
 │   │   ├── multi_classifier.py     # D-2: Multi-model Task Classifier
 │   │   ├── multi-classifier.py     # D-2: CLI wrapper
@@ -329,14 +329,14 @@ All modules ship with unit tests. Run them with:
 
 ```bash
 python3 -m pytest src/ -q
-# 64 passed in 0.07s
+# 71 passed
 ```
 
 | Module | Tests | What's covered |
 |--------|-------|---------------|
 | `src/cli/rrf-merge.py` | 13 | Score formula, multi-layer merge, k parameter, edge cases |
 | `src/cli/temporal-score.py` | 19 | Decay curve, 0-day=1.000, 7-day=0.497, 30-day=0.050 |
-| `src/quality/ensemble_judge.py` | 8 | Fallback score=70, stddev gate, consensus=True |
+| `src/quality/ensemble_judge.py` | 16 | Fail-closed without API key / on judge failure, block below 70, stddev gate, score parsing |
 | `src/routing/multi_classifier.py` | 24 | fix→cursor-agent, feat→copilot, docs→copilot (100% accuracy) |
 
 ---

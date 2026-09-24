@@ -245,10 +245,15 @@ if command -v python3 &>/dev/null && [ -f "${ROOT_DIR}/src/quality/ensemble-judg
     --task "${QUERY}" \
     --context "$(cat /tmp/ctx-rrf.json 2>/dev/null || echo '{}')" \
     --model "claude-haiku-4-5-20251001" 2>/dev/null)
-  if [ -n "$ENSEMBLE_OUT" ]; then
+  ENSEMBLE_REC=$(echo "$ENSEMBLE_OUT" | python3 -c \
+    "import json,sys; print(json.load(sys.stdin).get('recommendation',''))" 2>/dev/null)
+  if [ "$ENSEMBLE_REC" = "unavailable" ] || [ -z "$ENSEMBLE_REC" ]; then
+    # 判定できなかった時に既定値で埋めない。ヒューリスティックのスコアのまま進み、その旨を出す
+    echo "  Ensemble judge: 判定不可 (API key 未設定または判定官の失敗) — heuristic score のまま"
+  elif [ -n "$ENSEMBLE_OUT" ]; then
     QUALITY_SCORE=$(echo "$ENSEMBLE_OUT" | python3 -c \
       "import json,sys; print(int(json.load(sys.stdin)['ensemble_score']))" \
-      2>/dev/null || echo "${QUALITY_SCORE:-75}")
+      2>/dev/null || echo "${QUALITY_SCORE}")
     CONSENSUS=$(echo "$ENSEMBLE_OUT" | python3 -c \
       "import json,sys; print(json.load(sys.stdin).get('consensus','true'))" \
       2>/dev/null || echo "true")
