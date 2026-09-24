@@ -21,7 +21,8 @@ import subprocess
 import shutil
 from pathlib import Path
 
-OBSIDIAN_VAULT = Path(os.path.expanduser("~/dev/content/obsidian"))
+# README の「Key variables」と同じく OBSIDIAN_DIR で vault を指定できる (既定は従来の場所)
+OBSIDIAN_VAULT = Path(os.path.expanduser(os.environ.get("OBSIDIAN_DIR") or "~/dev/content/obsidian"))
 MULTI_PATH = OBSIDIAN_VAULT / ".smart-env" / "multi"
 MODEL_NAME = "TaylorAI/bge-micro-v2"
 
